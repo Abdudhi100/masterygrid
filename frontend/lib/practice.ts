@@ -2,9 +2,14 @@ import { api } from "@/lib/api";
 import type { ListResponse, QueryParams } from "@/types/academics";
 import type {
   PracticeAnswerInput,
+  PracticeAnalyticsDashboard,
+  PracticeRecommendation,
   PracticeResult,
   PracticeSession,
-  PracticeStartPayload
+  PracticeStartPayload,
+  PracticeSubjectPerformance,
+  PracticeSummary,
+  PracticeTopicPerformance
 } from "@/types/practice";
 
 function unwrapList<T>(payload: T[] | ListResponse<T>) {
@@ -50,3 +55,24 @@ export const submitPracticeSession = (
 
 export const getPracticeResult = (id: number | string) =>
   api.get<PracticeResult>(`/practice/sessions/${id}/result/`);
+
+export const getPracticeAnalyticsSummary = () =>
+  api.get<PracticeSummary>("/practice/analytics/summary/");
+
+export const getPracticeSubjectPerformance = () =>
+  api.get<PracticeSubjectPerformance[]>("/practice/analytics/subjects/");
+
+export const getPracticeTopicPerformance = () =>
+  api.get<PracticeTopicPerformance[]>("/practice/analytics/topics/");
+
+export const getPracticeWeakTopics = () =>
+  api.get<PracticeTopicPerformance[]>("/practice/analytics/weak-topics/");
+
+export const getPracticeStrongTopics = () =>
+  api.get<PracticeTopicPerformance[]>("/practice/analytics/strong-topics/");
+
+export const getPracticeRecommendations = () =>
+  api.get<PracticeRecommendation[]>("/practice/analytics/recommendations/");
+
+export const getPracticeAnalyticsDashboard = () =>
+  api.get<PracticeAnalyticsDashboard>("/practice/analytics/dashboard/");

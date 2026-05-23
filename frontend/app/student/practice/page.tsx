@@ -14,10 +14,15 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { Select } from "@/components/ui/Select";
 import { getClassLevels, getSubjects, getTopics } from "@/lib/academics";
 import { ApiError } from "@/lib/api";
-import { getPracticeSessions, startPracticeSession } from "@/lib/practice";
+import {
+  getPracticeRecommendations,
+  getPracticeSessions,
+  startPracticeSession
+} from "@/lib/practice";
 import type { ClassLevel, Subject, Topic } from "@/types/academics";
 import type {
   PracticeDifficulty,
+  PracticeRecommendation,
   PracticeSession,
   PracticeStartPayload,
   PracticeStatus
@@ -68,6 +73,16 @@ function statusTone(status: PracticeStatus) {
   return "warning";
 }
 
+function priorityTone(priority: PracticeRecommendation["priority"]) {
+  if (priority === "high") {
+    return "danger";
+  }
+  if (priority === "medium") {
+    return "warning";
+  }
+  return "success";
+}
+
 function percentageLabel(value: string | number | null) {
   if (value === null || value === undefined || value === "") {
     return "Not scored";
@@ -81,12 +96,19 @@ function percentageLabel(value: string | number | null) {
   return `${numeric.toFixed(2)}%`;
 }
 
+function isPracticeDifficulty(value: string): value is PracticeDifficulty {
+  return ["easy", "medium", "hard", "mixed"].includes(value);
+}
+
 export default function StudentPracticePage() {
   const router = useRouter();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [classLevels, setClassLevels] = useState<ClassLevel[]>([]);
   const [sessions, setSessions] = useState<PracticeSession[]>([]);
+  const [recommendations, setRecommendations] = useState<PracticeRecommendation[]>(
+    []
+  );
   const [form, setForm] = useState<FormState>({
     subject: "",
     topic: "",
@@ -102,17 +124,24 @@ export default function StudentPracticePage() {
   const loadPageData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [subjectsData, topicsData, classLevelsData, sessionsData] =
-        await Promise.all([
-          getSubjects(),
-          getTopics(),
-          getClassLevels(),
-          getPracticeSessions()
-        ]);
+      const [
+        subjectsData,
+        topicsData,
+        classLevelsData,
+        sessionsData,
+        recommendationsData
+      ] = await Promise.all([
+        getSubjects(),
+        getTopics(),
+        getClassLevels(),
+        getPracticeSessions(),
+        getPracticeRecommendations()
+      ]);
       setSubjects(subjectsData);
       setTopics(topicsData);
       setClassLevels(classLevelsData);
       setSessions(sessionsData);
+      setRecommendations(recommendationsData);
       setError("");
     } catch (err) {
       setError(
@@ -129,6 +158,23 @@ export default function StudentPracticePage() {
     void loadPageData();
   }, [loadPageData]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const difficulty = params.get("difficulty");
+
+    setForm((current) => ({
+      ...current,
+      subject: params.get("subject") ?? current.subject,
+      topic: params.get("topic") ?? current.topic,
+      class_level: params.get("class_level") ?? current.class_level,
+      difficulty:
+        difficulty && isPracticeDifficulty(difficulty)
+          ? difficulty
+          : current.difficulty,
+      question_count: params.get("question_count") ?? current.question_count
+    }));
+  }, []);
+
   const filteredTopics = useMemo(() => {
     return topics.filter((topic) => {
       const matchesSubject = form.subject
@@ -141,6 +187,11 @@ export default function StudentPracticePage() {
     });
   }, [form.class_level, form.subject, topics]);
 
+  const topRecommendations = useMemo(
+    () => recommendations.slice(0, 3),
+    [recommendations]
+  );
+
   function updateForm(name: keyof FormState, value: string) {
     setFormError("");
     setForm((current) => ({
@@ -148,6 +199,20 @@ export default function StudentPracticePage() {
       [name]: value,
       ...(name === "subject" || name === "class_level" ? { topic: "" } : {})
     }));
+  }
+
+  function applyRecommendation(recommendation: PracticeRecommendation) {
+    setFormError("");
+    setForm((current) => ({
+      ...current,
+      subject: String(recommendation.subject_id),
+      topic: String(recommendation.topic_id),
+      difficulty: recommendation.recommended_difficulty,
+      question_count: String(recommendation.suggested_question_count)
+    }));
+    document
+      .getElementById("start-practice")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function handleStartPractice(event: FormEvent<HTMLFormElement>) {
@@ -200,79 +265,156 @@ export default function StudentPracticePage() {
       <PageHeader
         title="Practice"
         description="Start self-paced practice from approved question-bank questions."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Link href="/student/practice/analytics">
+              <Button variant="secondary">View Practice Analytics</Button>
+            </Link>
+            <Link href="/student/practice/analytics#recommendations">
+              <Button>View Recommendations</Button>
+            </Link>
+          </div>
+        }
       />
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <Card>
-          <h2 className="text-base font-semibold text-ink">Start Practice</h2>
-          <p className="mt-2 text-sm leading-6 text-muted">
-            Practice uses only approved active questions from the trusted question bank.
-          </p>
+        <div className="space-y-6">
+          <Card id="start-practice">
+            <h2 className="text-base font-semibold text-ink">Start Practice</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Practice uses only approved active questions from the trusted question bank.
+            </p>
 
-          {formError ? (
-            <div className="mt-4 rounded-md border border-red-100 bg-red-50 px-4 py-3 text-sm text-danger">
-              {formError}
+            {formError ? (
+              <div className="mt-4 rounded-md border border-red-100 bg-red-50 px-4 py-3 text-sm text-danger">
+                {formError}
+              </div>
+            ) : null}
+
+            <form className="mt-5 space-y-4" onSubmit={handleStartPractice}>
+              <Select
+                label="Subject"
+                value={form.subject}
+                options={[
+                  { value: "", label: "Select subject" },
+                  ...subjects.map((subject) => ({
+                    value: String(subject.id),
+                    label: subject.name
+                  }))
+                ]}
+                onChange={(event) => updateForm("subject", event.target.value)}
+              />
+              <Select
+                label="Class level"
+                value={form.class_level}
+                options={[
+                  { value: "", label: "Any class level" },
+                  ...classLevels.map((classLevel) => ({
+                    value: String(classLevel.id),
+                    label: classLevel.name
+                  }))
+                ]}
+                onChange={(event) => updateForm("class_level", event.target.value)}
+              />
+              <Select
+                label="Topic"
+                value={form.topic}
+                options={[
+                  { value: "", label: "Any matching topic" },
+                  ...filteredTopics.map((topic) => ({
+                    value: String(topic.id),
+                    label: topic.title
+                  }))
+                ]}
+                onChange={(event) => updateForm("topic", event.target.value)}
+              />
+              <Select
+                label="Difficulty"
+                value={form.difficulty}
+                options={difficultyOptions}
+                onChange={(event) =>
+                  updateForm("difficulty", event.target.value as PracticeDifficulty)
+                }
+              />
+              <Input
+                label="Question count"
+                type="number"
+                min={1}
+                max={100}
+                value={form.question_count}
+                onChange={(event) =>
+                  updateForm("question_count", event.target.value)
+                }
+              />
+              <Button type="submit" isLoading={isStarting}>
+                Start Practice
+              </Button>
+            </form>
+          </Card>
+
+          <Card>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-ink">
+                  Recommended Next
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-muted">
+                  Use your analytics recommendations to prefill the practice form.
+                </p>
+              </div>
+              <Link href="/student/practice/analytics#recommendations">
+                <Button variant="secondary">View All</Button>
+              </Link>
             </div>
-          ) : null}
 
-          <form className="mt-5 space-y-4" onSubmit={handleStartPractice}>
-            <Select
-              label="Subject"
-              value={form.subject}
-              options={[
-                { value: "", label: "Select subject" },
-                ...subjects.map((subject) => ({
-                  value: String(subject.id),
-                  label: subject.name
-                }))
-              ]}
-              onChange={(event) => updateForm("subject", event.target.value)}
-            />
-            <Select
-              label="Class level"
-              value={form.class_level}
-              options={[
-                { value: "", label: "Any class level" },
-                ...classLevels.map((classLevel) => ({
-                  value: String(classLevel.id),
-                  label: classLevel.name
-                }))
-              ]}
-              onChange={(event) => updateForm("class_level", event.target.value)}
-            />
-            <Select
-              label="Topic"
-              value={form.topic}
-              options={[
-                { value: "", label: "Any matching topic" },
-                ...filteredTopics.map((topic) => ({
-                  value: String(topic.id),
-                  label: topic.title
-                }))
-              ]}
-              onChange={(event) => updateForm("topic", event.target.value)}
-            />
-            <Select
-              label="Difficulty"
-              value={form.difficulty}
-              options={difficultyOptions}
-              onChange={(event) =>
-                updateForm("difficulty", event.target.value as PracticeDifficulty)
-              }
-            />
-            <Input
-              label="Question count"
-              type="number"
-              min={1}
-              max={100}
-              value={form.question_count}
-              onChange={(event) => updateForm("question_count", event.target.value)}
-            />
-            <Button type="submit" isLoading={isStarting}>
-              Start Practice
-            </Button>
-          </form>
-        </Card>
+            <div className="mt-4 space-y-3">
+              {topRecommendations.length ? (
+                topRecommendations.map((recommendation) => (
+                  <div
+                    key={`${recommendation.subject_id}-${recommendation.topic_id}`}
+                    className="rounded-md border border-line bg-surface p-4"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-ink">
+                        {recommendation.topic_title}
+                      </p>
+                      <Badge tone={priorityTone(recommendation.priority)}>
+                        {recommendation.priority}
+                      </Badge>
+                      <Badge tone="brand">
+                        {humanize(recommendation.recommended_difficulty)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-muted">
+                      {recommendation.subject_name}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-muted">
+                      {recommendation.reason}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-muted">
+                        {recommendation.available_question_count} available -{" "}
+                        {recommendation.suggested_question_count} suggested
+                      </span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => applyRecommendation(recommendation)}
+                      >
+                        Use Recommendation
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <EmptyState
+                  title="No recommendations yet"
+                  description="Complete practice sessions or ask an admin to approve more question-bank questions."
+                />
+              )}
+            </div>
+          </Card>
+        </div>
 
         <Card>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

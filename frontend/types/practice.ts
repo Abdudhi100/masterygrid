@@ -77,3 +77,80 @@ export type PracticeResultAnswer = {
 export type PracticeResult = PracticeSession & {
   answers: PracticeResultAnswer[];
 };
+
+export type PracticeSummary = {
+  total_sessions_completed: number;
+  total_questions_answered: number;
+  total_correct_answers: number;
+  overall_average_percentage: number | null;
+  best_percentage: number | null;
+  lowest_percentage: number | null;
+  last_practice_at: string | null;
+  best_subject: string | null;
+  weakest_subject: string | null;
+};
+
+export type PracticeSubjectPerformance = {
+  subject_id: number;
+  subject_name: string;
+  sessions_completed: number;
+  questions_answered: number;
+  correct_answers: number;
+  average_percentage: number | null;
+  last_practiced_at: string | null;
+};
+
+export type PracticeTopicStrength = "strong" | "average" | "weak";
+
+export type PracticeTopicPerformance = {
+  topic_id: number;
+  topic_title: string;
+  subject_id: number;
+  subject_name: string;
+  sessions_completed: number;
+  questions_answered: number;
+  correct_answers: number;
+  average_percentage: number | null;
+  last_practiced_at: string | null;
+  strength_level: PracticeTopicStrength;
+};
+
+export type PracticeRecommendationPriority = "high" | "medium" | "low";
+
+export type PracticeRecommendation = {
+  subject_id: number;
+  subject_name: string;
+  topic_id: number;
+  topic_title: string;
+  priority: PracticeRecommendationPriority;
+  reason: string;
+  recommended_difficulty: PracticeDifficulty;
+  available_question_count: number;
+  suggested_question_count: number;
+};
+
+export type PracticeRecentSession = {
+  id: number;
+  subject_id: number;
+  subject_name: string;
+  topic_id: number | null;
+  topic_title: string | null;
+  difficulty: PracticeDifficulty;
+  question_count_requested: number;
+  score: number;
+  total_marks: number;
+  percentage: number | null;
+  started_at: string;
+  submitted_at: string | null;
+};
+
+export type PracticeAnalyticsDashboard = {
+  summary: PracticeSummary;
+  subject_performance: PracticeSubjectPerformance[];
+  topic_performance: PracticeTopicPerformance[];
+  weak_topics: PracticeTopicPerformance[];
+  strong_topics: PracticeTopicPerformance[];
+  recommendations: PracticeRecommendation[];
+  recent_sessions: PracticeRecentSession[];
+  message: string;
+};

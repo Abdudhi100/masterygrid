@@ -120,6 +120,12 @@ AI can suggest topic tags, difficulty, explanations, and quality warnings for
 existing question-bank items without auto-approving or generating student-facing
 questions. See [docs/AI_QUESTION_INTELLIGENCE.md](docs/AI_QUESTION_INTELLIGENCE.md).
 
+## Practice Analytics
+
+Student practice analytics and recommendations are computed from submitted
+practice sessions and approved active question-bank availability only. See
+[docs/PRACTICE_ANALYTICS.md](docs/PRACTICE_ANALYTICS.md).
+
 ## Deployment
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Render/Railway backend setup,

@@ -27,3 +27,14 @@ class PracticeSessionPermission(BasePermission):
             and obj.student_id == user.id
             and obj.school_id == user.school_id
         )
+
+
+class PracticeAnalyticsPermission(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and user.role == UserRole.STUDENT
+            and user.school_id
+        )

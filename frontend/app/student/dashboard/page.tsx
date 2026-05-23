@@ -11,9 +11,16 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { StatCard } from "@/components/ui/StatCard";
 import { ApiError } from "@/lib/api";
-import { getPracticeSessions } from "@/lib/practice";
+import {
+  getPracticeAnalyticsDashboard,
+  getPracticeSessions
+} from "@/lib/practice";
 import { getMyAssignments } from "@/lib/submissions";
-import type { PracticeSession } from "@/types/practice";
+import type {
+  PracticeAnalyticsDashboard,
+  PracticeRecommendation,
+  PracticeSession
+} from "@/types/practice";
 import type { StudentAssignmentItem } from "@/types/submissions";
 
 function isCompleted(assignment: StudentAssignmentItem) {
@@ -22,21 +29,48 @@ function isCompleted(assignment: StudentAssignmentItem) {
   );
 }
 
+function formatPercentage(value?: number | string | null) {
+  if (value === null || value === undefined || value === "") {
+    return "Not scored";
+  }
+
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) {
+    return "Not scored";
+  }
+
+  return `${numeric.toFixed(2)}%`;
+}
+
+function recommendationHref(recommendation: PracticeRecommendation) {
+  const params = new URLSearchParams({
+    subject: String(recommendation.subject_id),
+    topic: String(recommendation.topic_id),
+    difficulty: recommendation.recommended_difficulty,
+    question_count: String(recommendation.suggested_question_count)
+  });
+  return `/student/practice?${params.toString()}`;
+}
+
 export default function StudentDashboardPage() {
   const [assignments, setAssignments] = useState<StudentAssignmentItem[]>([]);
   const [practiceSessions, setPracticeSessions] = useState<PracticeSession[]>([]);
+  const [practiceAnalytics, setPracticeAnalytics] =
+    useState<PracticeAnalyticsDashboard | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const [assignmentData, practiceData] = await Promise.all([
+        const [assignmentData, practiceData, analyticsData] = await Promise.all([
           getMyAssignments(),
-          getPracticeSessions()
+          getPracticeSessions(),
+          getPracticeAnalyticsDashboard()
         ]);
         setAssignments(assignmentData);
         setPracticeSessions(practiceData);
+        setPracticeAnalytics(analyticsData);
       } catch (err) {
         setError(
           err instanceof ApiError
@@ -65,6 +99,8 @@ export default function StudentDashboardPage() {
     return { pending, inProgress, completed, submittedPractice };
   }, [assignments, practiceSessions]);
 
+  const topRecommendation = practiceAnalytics?.recommendations[0] ?? null;
+
   if (isLoading) {
     return <LoadingState label="Loading your assignments..." />;
   }
@@ -86,6 +122,9 @@ export default function StudentDashboardPage() {
             <Link href="/student/practice">
               <Button>Start Practice</Button>
             </Link>
+            <Link href="/student/practice/analytics">
+              <Button variant="secondary">Practice Analytics</Button>
+            </Link>
           </div>
         }
       />
@@ -98,6 +137,84 @@ export default function StudentDashboardPage() {
           label="Practice done"
           value={counts.submittedPractice.length}
         />
+        <StatCard
+          label="Practice average"
+          value={formatPercentage(
+            practiceAnalytics?.summary.overall_average_percentage
+          )}
+        />
+      </section>
+
+      <section className="mt-6 grid gap-4 lg:grid-cols-2">
+        <Card>
+          <h2 className="text-base font-semibold text-ink">
+            Practice Analytics
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Track your weak topics, strong topics, and recent practice scores.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/student/practice/analytics">
+              <Button>Open Analytics</Button>
+            </Link>
+            <Link href="/student/practice">
+              <Button variant="secondary">Start Practice</Button>
+            </Link>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-ink">
+                Recommended Next
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                Suggestions come from your practice history and approved
+                question-bank availability.
+              </p>
+            </div>
+            <Link href="/student/practice/analytics#recommendations">
+              <Button variant="secondary">View All</Button>
+            </Link>
+          </div>
+          {topRecommendation ? (
+            <div className="mt-4 rounded-md border border-line bg-surface p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-semibold text-ink">
+                  {topRecommendation.topic_title}
+                </p>
+                <Badge
+                  tone={
+                    topRecommendation.priority === "high"
+                      ? "danger"
+                      : topRecommendation.priority === "medium"
+                        ? "warning"
+                        : "success"
+                  }
+                >
+                  {topRecommendation.priority}
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted">
+                {topRecommendation.subject_name}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                {topRecommendation.reason}
+              </p>
+              <Link
+                href={recommendationHref(topRecommendation)}
+                className="mt-3 inline-block"
+              >
+                <Button>Start Recommended Practice</Button>
+              </Link>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm leading-6 text-muted">
+              Complete a practice session to unlock personalized analytics.
+            </p>
+          )}
+        </Card>
       </section>
 
       <section className="mt-6">

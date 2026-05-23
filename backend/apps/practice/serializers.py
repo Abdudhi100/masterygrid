@@ -259,3 +259,76 @@ class PracticeResultSerializer(PracticeSessionBaseSerializer):
             "session_question",
         ).order_by("session_question__order")
         return PracticeResultAnswerSerializer(answers, many=True).data
+
+
+class PracticeSummarySerializer(serializers.Serializer):
+    total_sessions_completed = serializers.IntegerField()
+    total_questions_answered = serializers.IntegerField()
+    total_correct_answers = serializers.IntegerField()
+    overall_average_percentage = serializers.FloatField(allow_null=True)
+    best_percentage = serializers.FloatField(allow_null=True)
+    lowest_percentage = serializers.FloatField(allow_null=True)
+    last_practice_at = serializers.DateTimeField(allow_null=True)
+    best_subject = serializers.CharField(allow_null=True)
+    weakest_subject = serializers.CharField(allow_null=True)
+
+
+class PracticeSubjectPerformanceSerializer(serializers.Serializer):
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    sessions_completed = serializers.IntegerField()
+    questions_answered = serializers.IntegerField()
+    correct_answers = serializers.IntegerField()
+    average_percentage = serializers.FloatField(allow_null=True)
+    last_practiced_at = serializers.DateTimeField(allow_null=True)
+
+
+class PracticeTopicPerformanceSerializer(serializers.Serializer):
+    topic_id = serializers.IntegerField()
+    topic_title = serializers.CharField()
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    sessions_completed = serializers.IntegerField()
+    questions_answered = serializers.IntegerField()
+    correct_answers = serializers.IntegerField()
+    average_percentage = serializers.FloatField(allow_null=True)
+    last_practiced_at = serializers.DateTimeField(allow_null=True)
+    strength_level = serializers.CharField()
+
+
+class PracticeRecommendationSerializer(serializers.Serializer):
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    topic_id = serializers.IntegerField()
+    topic_title = serializers.CharField()
+    priority = serializers.CharField()
+    reason = serializers.CharField()
+    recommended_difficulty = serializers.CharField()
+    available_question_count = serializers.IntegerField()
+    suggested_question_count = serializers.IntegerField()
+
+
+class PracticeRecentSessionSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    topic_id = serializers.IntegerField(allow_null=True)
+    topic_title = serializers.CharField(allow_null=True)
+    difficulty = serializers.CharField()
+    question_count_requested = serializers.IntegerField()
+    score = serializers.IntegerField()
+    total_marks = serializers.IntegerField()
+    percentage = serializers.FloatField(allow_null=True)
+    started_at = serializers.DateTimeField()
+    submitted_at = serializers.DateTimeField(allow_null=True)
+
+
+class PracticeAnalyticsDashboardSerializer(serializers.Serializer):
+    summary = PracticeSummarySerializer()
+    subject_performance = PracticeSubjectPerformanceSerializer(many=True)
+    topic_performance = PracticeTopicPerformanceSerializer(many=True)
+    weak_topics = PracticeTopicPerformanceSerializer(many=True)
+    strong_topics = PracticeTopicPerformanceSerializer(many=True)
+    recommendations = PracticeRecommendationSerializer(many=True)
+    recent_sessions = PracticeRecentSessionSerializer(many=True)
+    message = serializers.CharField(allow_blank=True)
