@@ -38,7 +38,8 @@ export const teacherNavItems: NavItem[] = [
 
 export const studentNavItems: NavItem[] = [
   { label: "Dashboard", href: "/student/dashboard" },
-  { label: "My Assignments", href: "/student/assignments" }
+  { label: "My Assignments", href: "/student/assignments" },
+  { label: "Practice", href: "/student/practice" }
 ];
 
 export function dashboardPathForRole(role: UserRole): string {

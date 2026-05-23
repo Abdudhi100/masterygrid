@@ -20,6 +20,7 @@ urlpatterns = [
     path("api/question-bank/", include("apps.question_bank.urls")),
     path("api/assignments/", include("apps.assignments.urls")),
     path("api/submissions/", include("apps.submissions.urls")),
+    path("api/practice/", include("apps.practice.urls")),
     path("api/analytics/", include("apps.analytics.urls")),
     path("api/notifications/", include("apps.notifications.urls")),
     path("api/ai-generation/", include("apps.ai_generation.urls")),
@@ -27,4 +28,3 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-

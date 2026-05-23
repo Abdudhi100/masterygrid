@@ -54,6 +54,7 @@ LOCAL_APPS = [
     "apps.question_bank.apps.QuestionBankConfig",
     "apps.assignments.apps.AssignmentsConfig",
     "apps.submissions.apps.SubmissionsConfig",
+    "apps.practice.apps.PracticeConfig",
     "apps.analytics.apps.AnalyticsConfig",
     "apps.notifications.apps.NotificationsConfig",
     "apps.ai_generation.apps.AiGenerationConfig",
