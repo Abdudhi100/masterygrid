@@ -79,7 +79,7 @@ def get_available_questions_for_assignment(
         "topic",
         "class_level",
         "source",
-    ).prefetch_related("options")
+    ).prefetch_related("options", "media")
 
     available_count = queryset.count()
     if available_count < question_count:

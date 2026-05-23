@@ -3,17 +3,25 @@ from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.common.choices import QuestionStatus, UserRole
 from apps.question_bank.filters import QuestionFilter
-from apps.question_bank.models import Question, QuestionImportBatch, QuestionSource
+from apps.question_bank.models import (
+    Question,
+    QuestionImportBatch,
+    QuestionMedia,
+    QuestionSource,
+)
 from apps.question_bank.permissions import (
     CanImportQuestions,
     CanSearchApprovedQuestions,
     CanViewQuestionImports,
     QuestionBankPermission,
+    QuestionMediaPermission,
+    can_manage_question_media,
 )
 from apps.question_bank.selectors import get_question_queryset_for_user, is_platform_admin
 from apps.question_bank.serializers import (
@@ -22,6 +30,7 @@ from apps.question_bank.serializers import (
     QuestionImportCreateSerializer,
     QuestionImportRowSerializer,
     QuestionCreateUpdateSerializer,
+    QuestionMediaSerializer,
     QuestionSerializer,
     QuestionSourceSerializer,
 )
@@ -101,6 +110,37 @@ class QuestionViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(archived_question)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["get", "post"], url_path="media")
+    def media(self, request, pk=None):
+        question = self.get_object()
+
+        if request.method.lower() == "get":
+            queryset = question.media.all().order_by("display_order", "id")
+            serializer = QuestionMediaSerializer(
+                queryset,
+                many=True,
+                context=self.get_serializer_context(),
+            )
+            return Response(serializer.data)
+
+        if not can_manage_question_media(question, request.user):
+            raise PermissionDenied("You do not have permission to manage this media.")
+
+        serializer = QuestionMediaSerializer(
+            data=request.data,
+            context={
+                **self.get_serializer_context(),
+                "question": question,
+            },
+        )
+        serializer.is_valid(raise_exception=True)
+        media = serializer.save()
+        output_serializer = QuestionMediaSerializer(
+            media,
+            context=self.get_serializer_context(),
+        )
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         question = self.get_object()
@@ -140,7 +180,7 @@ class QuestionViewSet(viewsets.ModelViewSet):
             "source",
             "created_by",
             "reviewed_by",
-        ).prefetch_related("options")
+        ).prefetch_related("options", "media")
 
         if not is_platform_admin(user):
             queryset = queryset.filter(Q(school__isnull=True) | Q(school=user.school))
@@ -266,3 +306,36 @@ class QuestionImportBatchViewSet(viewsets.ModelViewSet):
             context=self.get_serializer_context(),
         )
         return Response(serializer.data)
+
+
+class QuestionMediaViewSet(viewsets.ModelViewSet):
+    model = QuestionMedia
+    serializer_class = QuestionMediaSerializer
+    permission_classes = [QuestionMediaPermission]
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        visible_questions = get_question_queryset_for_user(self.request.user)
+        return QuestionMedia.objects.select_related(
+            "question",
+            "question__school",
+            "question__subject",
+            "question__topic",
+            "created_by",
+        ).filter(question__in=visible_questions)
+
+    def perform_update(self, serializer):
+        media = self.get_object()
+        if not can_manage_question_media(media.question, self.request.user):
+            raise PermissionDenied("You do not have permission to manage this media.")
+        serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        media = self.get_object()
+        if not can_manage_question_media(media.question, request.user):
+            raise PermissionDenied("You do not have permission to manage this media.")
+        media.is_active = False
+        media.is_primary = False
+        media.full_clean()
+        media.save(update_fields=["is_active", "is_primary", "updated_at"])
+        return Response(status=status.HTTP_204_NO_CONTENT)

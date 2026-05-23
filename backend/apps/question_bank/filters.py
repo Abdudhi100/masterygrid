@@ -18,4 +18,6 @@ class QuestionFilter(django_filters.FilterSet):
             "source",
             "source_type",
             "is_active",
+            "has_diagram",
+            "needs_manual_review",
         ]

@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { QuestionMediaDisplay } from "@/components/question-bank/QuestionMediaDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -228,6 +229,10 @@ function PracticeAttemptContent({ sessionId }: { sessionId: string }) {
             <p className="mt-3 text-base font-medium leading-7 text-ink">
               {question.question_text}
             </p>
+            {/* TODO: Backend practice detail payload needs media snapshot exposure. */}
+            <div className="mt-4">
+              <QuestionMediaDisplay media={question.media} compact />
+            </div>
             <div className="mt-4 space-y-2">
               {question.options.map((option) => (
                 <label

@@ -20,6 +20,7 @@ def get_practice_sessions_for_user(user):
     ).prefetch_related(
         "session_questions",
         "session_questions__question",
+        "session_questions__question__media",
         "answers",
     )
 
@@ -61,7 +62,7 @@ def get_available_practice_questions(
         "topic",
         "class_level",
         "source",
-    ).prefetch_related("options")
+    ).prefetch_related("options", "media")
 
     if topic is not None:
         queryset = queryset.filter(topic=topic)

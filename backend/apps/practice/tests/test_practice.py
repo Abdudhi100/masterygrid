@@ -7,7 +7,7 @@ from apps.academics.models import ClassLevel, Subject, Topic
 from apps.accounts.models import User
 from apps.common.choices import QuestionStatus, UserRole
 from apps.practice.models import PracticeSession, PracticeSessionStatus
-from apps.question_bank.models import Question, QuestionOption
+from apps.question_bank.models import Question, QuestionMedia, QuestionOption
 from apps.schools.models import School
 
 
@@ -73,6 +73,7 @@ class PracticeWorkflowTests(TestCase):
         status=QuestionStatus.APPROVED,
         is_active=True,
         correct_label="A",
+        with_media=False,
     ):
         question = Question.objects.create(
             school=self.school if school is None else school,
@@ -92,6 +93,16 @@ class PracticeWorkflowTests(TestCase):
                 label=label,
                 text=f"{text} option {label}",
                 is_correct=label == correct_label,
+            )
+        if with_media:
+            QuestionMedia.objects.create(
+                question=question,
+                external_url="https://example.com/practice-diagram.png",
+                description="Practice diagram",
+                alt_text="A practice question diagram",
+                caption="Practice diagram caption",
+                is_primary=True,
+                created_by=self.teacher,
             )
         return question
 
@@ -122,6 +133,8 @@ class PracticeWorkflowTests(TestCase):
         self.assertEqual(response.data["status"], PracticeSessionStatus.IN_PROGRESS)
         self.assertEqual(len(response.data["questions"]), 1)
         self.assertEqual(len(response.data["questions"][0]["options"]), 4)
+        self.assertFalse(response.data["questions"][0]["has_diagram"])
+        self.assertEqual(response.data["questions"][0]["media"], [])
 
     def test_teacher_cannot_start_practice(self):
         self.create_question("Approved practice question")
@@ -191,6 +204,61 @@ class PracticeWorkflowTests(TestCase):
         self.assertNotIn("is_correct", response_text)
         self.assertNotIn("correct_option", response_text)
         self.assertNotIn("Explanation for", response_text)
+
+    def test_practice_attempt_includes_diagram_media_without_answers(self):
+        self.create_question("Diagram practice question", with_media=True)
+
+        response = self.start_practice()
+
+        self.assertEqual(response.status_code, 201)
+        question = response.data["questions"][0]
+        self.assertTrue(question["has_diagram"])
+        self.assertEqual(question["diagram_description"], "Practice diagram")
+        self.assertEqual(len(question["media"]), 1)
+        self.assertEqual(
+            question["media"][0]["external_url"],
+            "https://example.com/practice-diagram.png",
+        )
+        response_text = str(question)
+        self.assertNotIn("is_correct", response_text)
+        self.assertNotIn("correct_option", response_text)
+        self.assertNotIn("Explanation for", response_text)
+
+    def test_practice_result_includes_diagram_media(self):
+        self.create_question(
+            "Diagram result question",
+            correct_label="A",
+            with_media=True,
+        )
+        start_response = self.start_practice()
+        session = PracticeSession.objects.get(id=start_response.data["id"])
+        session_question = session.session_questions.select_related("question").get()
+        selected_option = session_question.question.options.get(label="A")
+
+        response = self.client.post(
+            f"/api/practice/sessions/{session.id}/submit/",
+            {
+                "answers": [
+                    {
+                        "session_question": session_question.id,
+                        "selected_option": selected_option.id,
+                    }
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        answer = response.data["answers"][0]
+        self.assertTrue(answer["has_diagram"])
+        self.assertEqual(answer["diagram_description"], "Practice diagram")
+        self.assertEqual(len(answer["media"]), 1)
+        self.assertEqual(
+            answer["media"][0]["external_url"],
+            "https://example.com/practice-diagram.png",
+        )
+        self.assertIn("correct_option", answer)
+        self.assertIn("explanation", answer)
 
     def test_submit_grades_correctly(self):
         self.create_question("Correct answer question", correct_label="A")

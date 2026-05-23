@@ -18,7 +18,12 @@ const csvTemplate = [
     "option_c",
     "option_d",
     "correct_option",
-    "explanation"
+    "explanation",
+    "has_diagram",
+    "diagram_file_name",
+    "diagram_url",
+    "diagram_description",
+    "needs_manual_review"
   ].join(","),
   [
     "Mathematics",
@@ -35,7 +40,12 @@ const csvTemplate = [
     "5",
     "6",
     "C",
-    "\"The sum of roots is -b/a = 5.\""
+    "\"The sum of roots is -b/a = 5.\"",
+    "false",
+    "",
+    "",
+    "",
+    "false"
   ].join(",")
 ].join("\n");
 

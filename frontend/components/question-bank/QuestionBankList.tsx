@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Select } from "@/components/ui/Select";
+import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/hooks/useAuth";
 import {
   getClassLevels,
@@ -364,9 +365,17 @@ export function QuestionBankList({ mode, basePath }: QuestionBankListProps) {
               key: "question_text",
               header: "Question",
               render: (row) => (
-                <span className="block min-w-[18rem] max-w-xl leading-6">
-                  {truncate(row.question_text)}
-                </span>
+                <div className="min-w-[18rem] max-w-xl">
+                  <span className="block leading-6">
+                    {truncate(row.question_text)}
+                  </span>
+                  <span className="mt-2 flex flex-wrap gap-2">
+                    {row.has_diagram ? <Badge tone="brand">diagram</Badge> : null}
+                    {row.needs_manual_review ? (
+                      <Badge tone="warning">manual review</Badge>
+                    ) : null}
+                  </span>
+                </div>
               )
             },
             {

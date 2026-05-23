@@ -1,3 +1,5 @@
+import type { QuestionMedia } from "@/types/questionBank";
+
 export type PracticeDifficulty = "easy" | "medium" | "hard" | "mixed";
 
 export type PracticeStatus = "in_progress" | "submitted" | "abandoned";
@@ -14,6 +16,7 @@ export type PracticeSessionQuestion = {
   question_text: string;
   marks: number;
   options: PracticeOption[];
+  media?: QuestionMedia[];
 };
 
 export type PracticeSession = {
@@ -72,6 +75,7 @@ export type PracticeResultAnswer = {
   is_correct: boolean;
   marks_awarded: number;
   explanation: string;
+  media?: QuestionMedia[];
 };
 
 export type PracticeResult = PracticeSession & {

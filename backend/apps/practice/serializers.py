@@ -14,6 +14,7 @@ from apps.practice.services import (
     submit_practice_session,
 )
 from apps.question_bank.models import QuestionOption
+from apps.question_bank.serializers import StudentQuestionMediaSerializer
 
 
 def raise_drf_validation_error(exc):
@@ -70,6 +71,12 @@ class PracticeOptionSerializer(serializers.Serializer):
 
 class PracticeQuestionSerializer(serializers.ModelSerializer):
     session_question = serializers.IntegerField(source="id")
+    has_diagram = serializers.BooleanField(source="question.has_diagram", read_only=True)
+    diagram_description = serializers.CharField(
+        source="question.diagram_description",
+        read_only=True,
+    )
+    media = serializers.SerializerMethodField()
     options = serializers.SerializerMethodField()
 
     class Meta:
@@ -78,10 +85,25 @@ class PracticeQuestionSerializer(serializers.ModelSerializer):
             "session_question",
             "order",
             "question_text",
+            "has_diagram",
+            "diagram_description",
+            "media",
             "marks",
             "options",
         ]
         read_only_fields = fields
+
+    def get_media(self, obj):
+        media = obj.question.media.filter(is_active=True).order_by(
+            "-is_primary",
+            "display_order",
+            "id",
+        )
+        return StudentQuestionMediaSerializer(
+            media,
+            many=True,
+            context=self.context,
+        ).data
 
     def get_options(self, obj):
         options = [
@@ -139,8 +161,16 @@ class PracticeSessionDetailSerializer(PracticeSessionBaseSerializer):
         fields = PracticeSessionBaseSerializer.Meta.fields + ["questions"]
 
     def get_questions(self, obj):
-        session_questions = obj.session_questions.order_by("order")
-        return PracticeQuestionSerializer(session_questions, many=True).data
+        session_questions = obj.session_questions.select_related(
+            "question",
+        ).prefetch_related(
+            "question__media",
+        ).order_by("order")
+        return PracticeQuestionSerializer(
+            session_questions,
+            many=True,
+            context=self.context,
+        ).data
 
 
 class PracticeHistorySerializer(PracticeSessionBaseSerializer):
@@ -187,6 +217,15 @@ class PracticeResultAnswerSerializer(serializers.ModelSerializer):
         source="session_question.question_text",
         read_only=True,
     )
+    has_diagram = serializers.BooleanField(
+        source="session_question.question.has_diagram",
+        read_only=True,
+    )
+    diagram_description = serializers.CharField(
+        source="session_question.question.diagram_description",
+        read_only=True,
+    )
+    media = serializers.SerializerMethodField()
     selected_option = serializers.SerializerMethodField()
     correct_option = serializers.SerializerMethodField()
     explanation = serializers.CharField(
@@ -199,6 +238,9 @@ class PracticeResultAnswerSerializer(serializers.ModelSerializer):
         fields = [
             "session_question",
             "question_text",
+            "has_diagram",
+            "diagram_description",
+            "media",
             "selected_option",
             "correct_option",
             "is_correct",
@@ -206,6 +248,18 @@ class PracticeResultAnswerSerializer(serializers.ModelSerializer):
             "explanation",
         ]
         read_only_fields = fields
+
+    def get_media(self, answer):
+        media = answer.session_question.question.media.filter(is_active=True).order_by(
+            "-is_primary",
+            "display_order",
+            "id",
+        )
+        return StudentQuestionMediaSerializer(
+            media,
+            many=True,
+            context=self.context,
+        ).data
 
     def _snapshot_option(self, answer, label):
         for option in answer.session_question.options_snapshot:
@@ -257,8 +311,15 @@ class PracticeResultSerializer(PracticeSessionBaseSerializer):
         answers = obj.answers.select_related(
             "selected_option",
             "session_question",
+            "session_question__question",
+        ).prefetch_related(
+            "session_question__question__media",
         ).order_by("session_question__order")
-        return PracticeResultAnswerSerializer(answers, many=True).data
+        return PracticeResultAnswerSerializer(
+            answers,
+            many=True,
+            context=self.context,
+        ).data
 
 
 class PracticeSummarySerializer(serializers.Serializer):

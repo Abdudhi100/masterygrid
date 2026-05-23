@@ -43,6 +43,28 @@ function shortHash(value: string) {
   return value ? `${value.slice(0, 10)}...` : "Not set";
 }
 
+const diagramFields = [
+  "has_diagram",
+  "diagram_file_name",
+  "diagram_url",
+  "diagram_description",
+  "needs_manual_review"
+];
+
+function rawValue(row: QuestionImportRow, key: string) {
+  const value = row.raw_data[key];
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  return String(value);
+}
+
+function diagramData(row: QuestionImportRow) {
+  return diagramFields
+    .map((field) => ({ field, value: rawValue(row, field) }))
+    .filter((item) => item.value);
+}
+
 export default function QuestionImportDetailPage({
   params
 }: {
@@ -218,6 +240,29 @@ export default function QuestionImportDetailPage({
             key: "content_hash",
             header: "Content hash",
             render: (row) => shortHash(row.content_hash)
+          },
+          {
+            key: "diagram_data",
+            header: "Diagram data",
+            render: (row) => {
+              const values = diagramData(row);
+              if (!values.length) {
+                return "No diagram data";
+              }
+
+              return (
+                <div className="min-w-[16rem] space-y-1 text-xs leading-5">
+                  {values.map((item) => (
+                    <p key={item.field}>
+                      <span className="font-semibold text-ink">
+                        {item.field}:
+                      </span>{" "}
+                      <span className="text-muted">{item.value}</span>
+                    </p>
+                  ))}
+                </div>
+              );
+            }
           }
         ]}
       />

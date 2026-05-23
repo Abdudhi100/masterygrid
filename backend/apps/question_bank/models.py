@@ -29,6 +29,10 @@ class QuestionOptionLabel(models.TextChoices):
     D = "D", "D"
 
 
+class QuestionMediaType(models.TextChoices):
+    IMAGE = "image", "Image"
+
+
 class QuestionImportFileType(models.TextChoices):
     CSV = "csv", "CSV"
     XLSX = "xlsx", "Excel"
@@ -136,6 +140,9 @@ class Question(TimeStampedModel):
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    has_diagram = models.BooleanField(default=False)
+    diagram_description = models.TextField(blank=True)
+    needs_manual_review = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -253,6 +260,101 @@ class QuestionOption(TimeStampedModel):
                 raise ValidationError(
                     {"text": "Duplicate option text is not allowed for the same question."}
                 )
+
+
+class QuestionMedia(TimeStampedModel):
+    question = models.ForeignKey(
+        Question,
+        related_name="media",
+        on_delete=models.CASCADE,
+    )
+    media_type = models.CharField(
+        max_length=16,
+        choices=QuestionMediaType.choices,
+        default=QuestionMediaType.IMAGE,
+    )
+    image = models.ImageField(
+        upload_to="question_media/%Y/%m/",
+        null=True,
+        blank=True,
+    )
+    external_url = models.URLField(blank=True)
+    original_filename = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+    alt_text = models.TextField(blank=True)
+    caption = models.CharField(max_length=255, blank=True)
+    display_order = models.PositiveIntegerField(default=1)
+    is_primary = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    needs_manual_review = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="created_question_media",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["display_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["question"],
+                condition=models.Q(is_primary=True, is_active=True),
+                name="unique_primary_active_question_media",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["question", "is_active"]),
+            models.Index(fields=["media_type", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.question_id} - {self.media_type}"
+
+    def clean(self):
+        super().clean()
+
+        if self.media_type != QuestionMediaType.IMAGE:
+            raise ValidationError({"media_type": "Only image media is supported for now."})
+
+        if not self.image and not self.external_url:
+            raise ValidationError(
+                {"external_url": "Provide either an uploaded image or an external URL."}
+            )
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        sync_question_diagram_state(self.question)
+
+    def delete(self, *args, **kwargs):
+        question = self.question
+        result = super().delete(*args, **kwargs)
+        sync_question_diagram_state(question)
+        return result
+
+
+def sync_question_diagram_state(question):
+    active_media = question.media.filter(is_active=True)
+    has_active_media = active_media.exists()
+    update_fields = []
+
+    if question.has_diagram != has_active_media:
+        question.has_diagram = has_active_media
+        update_fields.append("has_diagram")
+
+    primary_media = active_media.order_by("-is_primary", "display_order", "id").first()
+    if (
+        primary_media
+        and primary_media.description
+        and not question.diagram_description
+    ):
+        question.diagram_description = primary_media.description
+        update_fields.append("diagram_description")
+
+    if update_fields:
+        update_fields.append("updated_at")
+        question.save(update_fields=update_fields)
 
 
 class QuestionImportBatch(TimeStampedModel):

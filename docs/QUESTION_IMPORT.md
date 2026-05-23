@@ -31,11 +31,24 @@ The MVP processes CSV imports immediately.
 subject,class_level,topic,source_name,source_type,exam_body,year,difficulty,question_text,option_a,option_b,option_c,option_d,correct_option,explanation
 ```
 
+Optional diagram/media columns:
+
+```csv
+has_diagram,diagram_file_name,diagram_url,diagram_description,needs_manual_review
+```
+
 Example:
 
 ```csv
 subject,class_level,topic,source_name,source_type,exam_body,year,difficulty,question_text,option_a,option_b,option_c,option_d,correct_option,explanation
 Mathematics,SS2,Quadratic Equations,JAMB Mathematics,jamb_past_question,JAMB,2024,medium,What is the sum of roots of x^2 - 5x + 6 = 0?,2,3,5,6,C,The sum of roots is -b/a = 5.
+```
+
+Example with a diagram URL:
+
+```csv
+subject,class_level,topic,source_name,source_type,exam_body,year,difficulty,question_text,option_a,option_b,option_c,option_d,correct_option,explanation,has_diagram,diagram_file_name,diagram_url,diagram_description,needs_manual_review
+Mathematics,SS2,Quadratic Equations,JAMB Mathematics,jamb_past_question,JAMB,2024,medium,Use the graph to identify the roots.,-2 and 3,-3 and 2,2 and 3,-2 and -3,A,The x-intercepts give the roots.,true,,https://example.com/diagrams/quadratic-roots.png,Graph of a quadratic curve,true
 ```
 
 ## Valid Values
@@ -73,6 +86,12 @@ Mathematics,SS2,Quadratic Equations,JAMB Mathematics,jamb_past_question,JAMB,202
 - Exactly one option must be marked correct.
 - Duplicate option text in the same question is rejected.
 - Exact duplicate questions are marked as duplicate using a content hash.
+- `diagram_url` creates a `QuestionMedia` record linked to the imported draft question.
+- `has_diagram=true` without `diagram_url` still imports the row as draft, marks the
+  question for manual review, and keeps the filename in row `raw_data`.
+- `diagram_file_name` is a manual-review hint for now. CSV import does not attach
+  local image files or ZIP contents yet.
+- Diagram questions are never auto-approved.
 
 ## Review Workflow
 
@@ -128,3 +147,5 @@ AI and does not return draft, rejected, archived, or inactive questions.
 - Invalid difficulty: use `easy`, `medium`, or `hard`.
 - Invalid correct option: use `A`, `B`, `C`, or `D`.
 - Duplicate row: the same normalized question/options already exist.
+- Diagram file not attached: add a `diagram_url` now, or attach the image manually
+  after import when file upload support is available.

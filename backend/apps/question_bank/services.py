@@ -3,6 +3,7 @@ import hashlib
 import io
 
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.validators import URLValidator
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -16,6 +17,8 @@ from apps.question_bank.models import (
     QuestionImportBatchStatus,
     QuestionImportRow,
     QuestionImportRowStatus,
+    QuestionMedia,
+    QuestionMediaType,
     QuestionOption,
     QuestionOptionLabel,
     QuestionSource,
@@ -41,6 +44,15 @@ CSV_IMPORT_COLUMNS = {
     "correct_option",
     "explanation",
 }
+CSV_IMPORT_OPTIONAL_COLUMNS = {
+    "has_diagram",
+    "diagram_file_name",
+    "diagram_url",
+    "diagram_description",
+    "needs_manual_review",
+}
+BOOLEAN_TRUE_VALUES = {"1", "true", "yes", "y"}
+BOOLEAN_FALSE_VALUES = {"0", "false", "no", "n", ""}
 
 
 class DuplicateQuestionError(Exception):
@@ -135,6 +147,27 @@ def validate_question_options(options):
             {"options": f"Exactly {JAMB_MVP_OPTION_COUNT} options are required."}
         )
 
+    labels = [option.get("label") for option in options]
+    label_set = set(labels)
+    if label_set != EXPECTED_OPTION_LABELS:
+        raise ValidationError({"options": "Options must use labels A, B, C, and D."})
+
+    correct_count = sum(1 for option in options if option.get("is_correct") is True)
+    if correct_count != 1:
+        raise ValidationError({"options": "Exactly one option must be marked correct."})
+
+    normalized_texts = []
+    for option in options:
+        text = option.get("text", "")
+        if not text or not text.strip():
+            raise ValidationError({"options": "Option text cannot be blank."})
+        normalized_texts.append(text.strip().casefold())
+
+    if len(normalized_texts) != len(set(normalized_texts)):
+        raise ValidationError(
+            {"options": "Duplicate option text is not allowed for the same question."}
+        )
+
 
 def validation_error_message(exc):
     if hasattr(exc, "message_dict"):
@@ -178,6 +211,28 @@ def parse_optional_year(value):
         raise ValidationError({"year": "Year is outside the supported range."})
 
     return year
+
+
+def parse_optional_bool(value, *, field):
+    normalized_value = normalize_question_text(value).casefold()
+    if normalized_value in BOOLEAN_TRUE_VALUES:
+        return True
+    if normalized_value in BOOLEAN_FALSE_VALUES:
+        return False
+    raise ValidationError({field: "Use true/false, yes/no, or 1/0."})
+
+
+def validate_external_diagram_url(value):
+    url = get_optional_row_value({"diagram_url": value}, "diagram_url")
+    if not url:
+        return ""
+
+    validator = URLValidator(schemes=["http", "https"])
+    try:
+        validator(url)
+    except ValidationError as exc:
+        raise ValidationError({"diagram_url": "Enter a valid diagram URL."}) from exc
+    return url
 
 
 def find_visible_subject(*, name, school):
@@ -293,6 +348,17 @@ def validate_import_row(row_data, user, batch):
     question_text = get_required_row_value(row_data, "question_text")
     correct_option = get_required_row_value(row_data, "correct_option").upper()
     explanation = get_optional_row_value(row_data, "explanation")
+    has_diagram = parse_optional_bool(
+        row_data.get("has_diagram", ""),
+        field="has_diagram",
+    )
+    needs_manual_review = parse_optional_bool(
+        row_data.get("needs_manual_review", ""),
+        field="needs_manual_review",
+    )
+    diagram_file_name = get_optional_row_value(row_data, "diagram_file_name")
+    diagram_url = validate_external_diagram_url(row_data.get("diagram_url", ""))
+    diagram_description = get_optional_row_value(row_data, "diagram_description")
 
     if difficulty not in QuestionDifficulty.values:
         raise ValidationError({"difficulty": "Difficulty must be easy, medium, or hard."})
@@ -336,6 +402,31 @@ def validate_import_row(row_data, user, batch):
             content_hash=content_hash,
         )
 
+    diagram_requested = has_diagram or bool(diagram_url) or bool(diagram_file_name)
+    media = []
+    diagram_warning = ""
+    if diagram_url:
+        media.append(
+            {
+                "media_type": QuestionMediaType.IMAGE,
+                "external_url": diagram_url,
+                "original_filename": diagram_file_name,
+                "description": diagram_description,
+                "alt_text": diagram_description,
+                "caption": diagram_description[:255],
+                "display_order": 1,
+                "is_primary": True,
+                "is_active": True,
+                "needs_manual_review": needs_manual_review,
+            }
+        )
+    elif diagram_requested:
+        needs_manual_review = True
+        diagram_warning = (
+            "Warning: diagram file must be attached manually; CSV file import "
+            "does not attach diagram files yet."
+        )
+
     return {
         "school": school,
         "subject": subject,
@@ -347,12 +438,19 @@ def validate_import_row(row_data, user, batch):
         "explanation": explanation,
         "options": options,
         "content_hash": content_hash,
+        "has_diagram": diagram_requested,
+        "diagram_description": diagram_description,
+        "needs_manual_review": needs_manual_review,
+        "media": media,
+        "diagram_warning": diagram_warning,
     }
 
 
 @transaction.atomic
 def create_question_from_import_row(*, batch, validated_data):
     options = validated_data.pop("options")
+    media_items = validated_data.pop("media", [])
+    validated_data.pop("diagram_warning", "")
     question = Question(
         **validated_data,
         created_by=batch.uploaded_by,
@@ -366,6 +464,15 @@ def create_question_from_import_row(*, batch, validated_data):
         option = QuestionOption(question=question, **option_data)
         option.full_clean()
         option.save()
+
+    for media_data in media_items:
+        media = QuestionMedia(
+            question=question,
+            created_by=batch.uploaded_by,
+            **media_data,
+        )
+        media.full_clean()
+        media.save()
 
     return question
 
@@ -395,12 +502,14 @@ def import_question_row(batch, row_number, row_data):
     try:
         validated_data = validate_import_row(row_data, batch.uploaded_by, batch)
         import_row.content_hash = validated_data["content_hash"]
+        diagram_warning = validated_data.get("diagram_warning", "")
         question = create_question_from_import_row(
             batch=batch,
             validated_data=validated_data,
         )
         import_row.question = question
         import_row.status = QuestionImportRowStatus.IMPORTED
+        import_row.error_message = diagram_warning
     except DuplicateQuestionError as exc:
         import_row.status = QuestionImportRowStatus.DUPLICATE
         import_row.error_message = str(exc)
@@ -483,27 +592,6 @@ def process_question_import_batch(batch):
         ]
     )
     return batch
-
-    labels = [option.get("label") for option in options]
-    label_set = set(labels)
-    if label_set != EXPECTED_OPTION_LABELS:
-        raise ValidationError({"options": "Options must use labels A, B, C, and D."})
-
-    correct_count = sum(1 for option in options if option.get("is_correct") is True)
-    if correct_count != 1:
-        raise ValidationError({"options": "Exactly one option must be marked correct."})
-
-    normalized_texts = []
-    for option in options:
-        text = option.get("text", "")
-        if not text or not text.strip():
-            raise ValidationError({"options": "Option text cannot be blank."})
-        normalized_texts.append(text.strip().casefold())
-
-    if len(normalized_texts) != len(set(normalized_texts)):
-        raise ValidationError(
-            {"options": "Duplicate option text is not allowed for the same question."}
-        )
 
 
 def can_review_question(question, reviewer):

@@ -1,3 +1,5 @@
+import type { QuestionMedia } from "@/types/questionBank";
+
 export type SubmissionStatus =
   | "not_started"
   | "in_progress"
@@ -33,6 +35,7 @@ export type SubmissionQuestion = {
   question_text: string;
   marks: number;
   options: SubmissionQuestionOption[];
+  media?: QuestionMedia[];
 };
 
 export type Submission = {
@@ -80,6 +83,7 @@ export type SubmissionResultAnswer = {
   is_correct: boolean;
   marks_awarded: number;
   explanation: string;
+  media?: QuestionMedia[];
 };
 
 export type SubmissionResult = Submission & {

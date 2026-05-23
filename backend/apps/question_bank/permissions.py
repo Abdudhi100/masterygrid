@@ -1,8 +1,56 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 from apps.common.choices import QuestionStatus, UserRole
-from apps.question_bank.models import Question, QuestionImportBatch, QuestionSource
+from apps.question_bank.models import (
+    Question,
+    QuestionImportBatch,
+    QuestionMedia,
+    QuestionSource,
+)
 from apps.question_bank.selectors import is_platform_admin
+
+
+def can_manage_question_media(question, user):
+    if not user or not user.is_authenticated:
+        return False
+
+    if is_platform_admin(user):
+        return True
+
+    if user.role == UserRole.SCHOOL_ADMIN:
+        return question.school_id is not None and question.school_id == user.school_id
+
+    if user.role == UserRole.TEACHER:
+        return (
+            question.school_id == user.school_id
+            and question.created_by_id == user.id
+            and question.status == QuestionStatus.DRAFT
+        )
+
+    return False
+
+
+def can_view_question_media(question, user):
+    if not user or not user.is_authenticated:
+        return False
+
+    if is_platform_admin(user):
+        return True
+
+    if user.role == UserRole.SCHOOL_ADMIN and user.school_id:
+        return question.school_id is None or question.school_id == user.school_id
+
+    if user.role == UserRole.TEACHER and user.school_id:
+        return (
+            (
+                question.school_id is None
+                and question.status == QuestionStatus.APPROVED
+                and question.is_active
+            )
+            or question.school_id == user.school_id
+        )
+
+    return False
 
 
 class QuestionBankPermission(BasePermission):
@@ -31,7 +79,32 @@ class QuestionBankPermission(BasePermission):
 
             return user.role in {UserRole.SCHOOL_ADMIN, UserRole.TEACHER}
 
+        if model is QuestionMedia:
+            return user.role in {UserRole.SCHOOL_ADMIN, UserRole.TEACHER}
+
         return False
+
+
+class QuestionMediaPermission(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.role == UserRole.STUDENT:
+            return False
+        return is_platform_admin(user) or user.role in {
+            UserRole.SCHOOL_ADMIN,
+            UserRole.TEACHER,
+        }
+
+    def has_object_permission(self, request, view, obj):
+        if not isinstance(obj, QuestionMedia):
+            return False
+
+        if request.method in SAFE_METHODS:
+            return can_view_question_media(obj.question, request.user)
+
+        return can_manage_question_media(obj.question, request.user)
 
 
 class CanImportQuestions(BasePermission):

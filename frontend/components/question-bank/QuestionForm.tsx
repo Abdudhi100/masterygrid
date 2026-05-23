@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Select } from "@/components/ui/Select";
 import {
@@ -93,6 +94,16 @@ export function QuestionForm({
   const [explanation, setExplanation] = useState(
     initialQuestion?.explanation ?? ""
   );
+  const [hasDiagram, setHasDiagram] = useState(
+    initialQuestion?.has_diagram ?? false
+  );
+  const [diagramUrl, setDiagramUrl] = useState("");
+  const [diagramDescription, setDiagramDescription] = useState(
+    initialQuestion?.diagram_description ?? ""
+  );
+  const [needsManualReview, setNeedsManualReview] = useState(
+    initialQuestion?.needs_manual_review ?? false
+  );
   const [optionTexts, setOptionTexts] = useState<OptionTexts>(() =>
     initialOptionTexts(initialQuestion)
   );
@@ -166,6 +177,14 @@ export function QuestionForm({
       return "Select one correct option.";
     }
 
+    if (diagramUrl.trim()) {
+      try {
+        new URL(diagramUrl.trim());
+      } catch {
+        return "Enter a valid diagram URL.";
+      }
+    }
+
     return "";
   }
 
@@ -181,6 +200,13 @@ export function QuestionForm({
 
     setIsSubmitting(true);
     try {
+      const normalizedDiagramUrl = diagramUrl.trim();
+      const normalizedDiagramDescription = diagramDescription.trim();
+      const shouldMarkDiagram = hasDiagram || Boolean(normalizedDiagramUrl);
+      const hasExistingMedia = Boolean(initialQuestion?.media?.length);
+      const shouldMarkManualReview =
+        needsManualReview ||
+        (shouldMarkDiagram && !normalizedDiagramUrl && !hasExistingMedia);
       const payload: QuestionPayload = {
         subject: Number(subjectId),
         class_level: Number(classLevelId),
@@ -189,12 +215,28 @@ export function QuestionForm({
         question_text: questionText.trim(),
         explanation: explanation.trim(),
         difficulty,
+        has_diagram: shouldMarkDiagram,
+        diagram_description: normalizedDiagramDescription,
+        needs_manual_review: shouldMarkManualReview,
         options: optionLabels.map((label) => ({
           label,
           text: optionTexts[label].trim(),
           is_correct: correctOption === label
         }))
       };
+
+      if (normalizedDiagramUrl) {
+        payload.media = [
+          {
+            external_url: normalizedDiagramUrl,
+            description: normalizedDiagramDescription,
+            alt_text: normalizedDiagramDescription,
+            caption: normalizedDiagramDescription,
+            is_primary: true,
+            needs_manual_review: needsManualReview
+          }
+        ];
+      }
       const savedQuestion = await onSubmit(payload);
       onSaved(savedQuestion);
     } catch (err) {
@@ -318,6 +360,75 @@ export function QuestionForm({
             onOptionTextChange={setOptionText}
             onCorrectOptionChange={setCorrectOption}
           />
+        </div>
+      </Card>
+
+      <Card className="mt-6">
+        <h2 className="text-base font-semibold text-ink">Diagram</h2>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          Diagrams are optional. Use a hosted image URL for now; file upload and ZIP
+          matching will come later.
+        </p>
+
+        <div className="mt-4 grid gap-4">
+          <label className="flex items-start gap-3 rounded-md border border-line bg-surface p-3 text-sm text-ink">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={hasDiagram}
+              onChange={(event) => {
+                setHasDiagram(event.target.checked);
+                if (event.target.checked && !diagramUrl.trim()) {
+                  setNeedsManualReview(true);
+                }
+              }}
+            />
+            <span>
+              <span className="block font-semibold">This question has a diagram</span>
+              <span className="mt-1 block text-muted">
+                Mark this if the diagram will be attached later or supplied by URL.
+              </span>
+            </span>
+          </label>
+
+          <Input
+            label="Diagram URL"
+            type="url"
+            value={diagramUrl}
+            placeholder="https://example.com/diagram.png"
+            onChange={(event) => {
+              setDiagramUrl(event.target.value);
+              if (event.target.value.trim()) {
+                setHasDiagram(true);
+              }
+            }}
+          />
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-ink">
+              Diagram description
+            </span>
+            <textarea
+              className="min-h-20 w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
+              value={diagramDescription}
+              onChange={(event) => setDiagramDescription(event.target.value)}
+            />
+          </label>
+
+          <label className="flex items-start gap-3 rounded-md border border-line bg-surface p-3 text-sm text-ink">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={needsManualReview}
+              onChange={(event) => setNeedsManualReview(event.target.checked)}
+            />
+            <span>
+              <span className="block font-semibold">Needs manual review</span>
+              <span className="mt-1 block text-muted">
+                Use this when the diagram is missing, unclear, or needs inspection.
+              </span>
+            </span>
+          </label>
         </div>
       </Card>
 

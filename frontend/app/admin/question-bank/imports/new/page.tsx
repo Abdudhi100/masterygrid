@@ -37,6 +37,14 @@ const requiredColumns = [
   "explanation"
 ];
 
+const optionalDiagramColumns = [
+  "has_diagram",
+  "diagram_file_name",
+  "diagram_url",
+  "diagram_description",
+  "needs_manual_review"
+];
+
 export default function NewQuestionImportPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -175,6 +183,12 @@ export default function NewQuestionImportPage() {
             Subject, class level, and topic must already exist. Imported questions
             stay as drafts until approved.
           </p>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Use <span className="font-semibold text-ink">diagram_url</span> for
+            hosted diagram images. Use{" "}
+            <span className="font-semibold text-ink">diagram_file_name</span> only
+            as a manual matching hint; it does not upload files yet.
+          </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {requiredColumns.map((column) => (
               <span
@@ -185,6 +199,23 @@ export default function NewQuestionImportPage() {
               </span>
             ))}
           </div>
+          <h3 className="mt-5 text-sm font-semibold text-ink">
+            Optional diagram columns
+          </h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {optionalDiagramColumns.map((column) => (
+              <span
+                key={column}
+                className="rounded-md bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700"
+              >
+                {column}
+              </span>
+            ))}
+          </div>
+          <p className="mt-4 text-sm leading-6 text-muted">
+            Questions with diagrams still import as drafts and must be reviewed
+            before assignment or practice use.
+          </p>
         </Card>
       </div>
     </>

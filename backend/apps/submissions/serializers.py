@@ -4,6 +4,7 @@ from rest_framework import serializers
 from apps.assignments.models import Assignment, AssignmentQuestion
 from apps.common.choices import SubmissionStatus
 from apps.question_bank.models import QuestionOption
+from apps.question_bank.serializers import StudentQuestionMediaSerializer
 from apps.submissions.models import StudentAnswer, Submission
 from apps.submissions.services import (
     create_or_get_submission,
@@ -29,8 +30,23 @@ class StudentSubmissionQuestionSerializer(serializers.Serializer):
     assignment_question = serializers.IntegerField(source="id")
     question = serializers.IntegerField(source="question.id")
     question_text = serializers.CharField(source="question.question_text")
+    has_diagram = serializers.BooleanField(source="question.has_diagram")
+    diagram_description = serializers.CharField(source="question.diagram_description")
+    media = serializers.SerializerMethodField()
     marks = serializers.IntegerField()
     options = serializers.SerializerMethodField()
+
+    def get_media(self, assignment_question):
+        media = assignment_question.question.media.filter(is_active=True).order_by(
+            "-is_primary",
+            "display_order",
+            "id",
+        )
+        return StudentQuestionMediaSerializer(
+            media,
+            many=True,
+            context=self.context,
+        ).data
 
     def get_options(self, assignment_question):
         options = assignment_question.question.options.order_by("label")
@@ -118,7 +134,11 @@ class SubmissionStartSerializer(SubmissionSerializer):
 
     def get_questions(self, obj):
         assignment_questions = get_submission_questions_for_student(obj)
-        return StudentSubmissionQuestionSerializer(assignment_questions, many=True).data
+        return StudentSubmissionQuestionSerializer(
+            assignment_questions,
+            many=True,
+            context=self.context,
+        ).data
 
 
 class SubmissionAnswerInputSerializer(serializers.Serializer):
@@ -159,6 +179,15 @@ class SubmissionResultAnswerSerializer(serializers.ModelSerializer):
         source="assignment_question.question.question_text",
         read_only=True,
     )
+    has_diagram = serializers.BooleanField(
+        source="assignment_question.question.has_diagram",
+        read_only=True,
+    )
+    diagram_description = serializers.CharField(
+        source="assignment_question.question.diagram_description",
+        read_only=True,
+    )
+    media = serializers.SerializerMethodField()
     selected_option = ResultOptionSerializer(read_only=True)
     correct_option = serializers.SerializerMethodField()
     explanation = serializers.CharField(
@@ -171,6 +200,9 @@ class SubmissionResultAnswerSerializer(serializers.ModelSerializer):
         fields = [
             "assignment_question",
             "question_text",
+            "has_diagram",
+            "diagram_description",
+            "media",
             "selected_option",
             "correct_option",
             "is_correct",
@@ -178,6 +210,18 @@ class SubmissionResultAnswerSerializer(serializers.ModelSerializer):
             "explanation",
         ]
         read_only_fields = fields
+
+    def get_media(self, answer):
+        media = answer.assignment_question.question.media.filter(is_active=True).order_by(
+            "-is_primary",
+            "display_order",
+            "id",
+        )
+        return StudentQuestionMediaSerializer(
+            media,
+            many=True,
+            context=self.context,
+        ).data
 
     def get_correct_option(self, answer):
         correct_option = (
@@ -209,14 +253,21 @@ class SubmissionResultSerializer(SubmissionSerializer):
                 "selected_option",
                 "assignment_question",
                 "assignment_question__question",
-            ).prefetch_related("assignment_question__question__options")
+            ).prefetch_related(
+                "assignment_question__question__options",
+                "assignment_question__question__media",
+            )
         }
         ordered_answers = [
             answer_map[item_id]
             for item_id in obj.question_order
             if item_id in answer_map
         ]
-        return SubmissionResultAnswerSerializer(ordered_answers, many=True).data
+        return SubmissionResultAnswerSerializer(
+            ordered_answers,
+            many=True,
+            context=self.context,
+        ).data
 
 
 class StudentAssignmentListSerializer(serializers.ModelSerializer):

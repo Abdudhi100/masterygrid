@@ -74,6 +74,11 @@ class QuestionBankTests(TestCase):
             "option_d",
             "correct_option",
             "explanation",
+            "has_diagram",
+            "diagram_file_name",
+            "diagram_url",
+            "diagram_description",
+            "needs_manual_review",
         ]
         lines = [",".join(header)]
         for row in rows:
@@ -113,6 +118,7 @@ class QuestionBankTests(TestCase):
         difficulty="medium",
         is_active=True,
         question_text="Stored question?",
+        created_by=None,
     ):
         question = Question.objects.create(
             school=self.school,
@@ -124,7 +130,7 @@ class QuestionBankTests(TestCase):
             difficulty=difficulty,
             status=status,
             is_active=is_active,
-            created_by=self.teacher,
+            created_by=created_by or self.teacher,
         )
         for label, text, is_correct in [
             ("A", "Option A", False),
@@ -353,6 +359,118 @@ class QuestionBankTests(TestCase):
         self.assertIn("Only 1 approved active question", response.data["message"])
         self.assertEqual(response.data["results"][0]["id"], approved.id)
         self.assertEqual(len(response.data["results"][0]["options"]), 4)
+
+    def test_question_without_media_still_serializes(self):
+        question = self.create_stored_question()
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.get(f"/api/question-bank/questions/{question.id}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["has_diagram"])
+        self.assertFalse(response.data["needs_manual_review"])
+        self.assertEqual(response.data["media"], [])
+
+    def test_question_with_external_url_media_is_exposed(self):
+        question = self.create_stored_question(created_by=self.teacher)
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.post(
+            f"/api/question-bank/questions/{question.id}/media/",
+            {
+                "external_url": "https://example.com/diagram.png",
+                "description": "Triangle diagram",
+                "alt_text": "A triangle diagram",
+                "caption": "Triangle",
+                "is_primary": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        question.refresh_from_db()
+        self.assertTrue(question.has_diagram)
+        self.assertEqual(question.diagram_description, "Triangle diagram")
+
+        detail_response = self.client.get(f"/api/question-bank/questions/{question.id}/")
+        self.assertEqual(len(detail_response.data["media"]), 1)
+        self.assertEqual(
+            detail_response.data["media"][0]["external_url"],
+            "https://example.com/diagram.png",
+        )
+
+    def test_media_requires_image_or_external_url(self):
+        question = self.create_stored_question(created_by=self.teacher)
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.post(
+            f"/api/question-bank/questions/{question.id}/media/",
+            {"description": "Missing image and URL"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_import_csv_with_diagram_url_creates_media(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "Diagram Import",
+                "file": self.csv_upload(
+                    [
+                        self.import_row(
+                            question_text="Diagram question?",
+                            has_diagram="yes",
+                            diagram_url="https://example.com/math-diagram.png",
+                            diagram_description="A quadratic graph",
+                        )
+                    ]
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["successful_rows"], 1)
+        question = Question.objects.get(question_text="Diagram question?")
+        self.assertEqual(question.status, QuestionStatus.DRAFT)
+        self.assertTrue(question.has_diagram)
+        self.assertEqual(question.diagram_description, "A quadratic graph")
+        media = question.media.get()
+        self.assertEqual(media.external_url, "https://example.com/math-diagram.png")
+        self.assertTrue(media.is_primary)
+
+    def test_import_csv_with_diagram_file_name_marks_manual_review(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "Diagram Filename Import",
+                "file": self.csv_upload(
+                    [
+                        self.import_row(
+                            question_text="Manual diagram question?",
+                            has_diagram="true",
+                            diagram_file_name="diagram-001.png",
+                            diagram_description="A missing diagram",
+                        )
+                    ]
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["successful_rows"], 1)
+        question = Question.objects.get(question_text="Manual diagram question?")
+        self.assertEqual(question.status, QuestionStatus.DRAFT)
+        self.assertTrue(question.has_diagram)
+        self.assertTrue(question.needs_manual_review)
+        self.assertEqual(question.media.count(), 0)
+        row = QuestionImportBatch.objects.get(id=response.data["id"]).rows.get()
+        self.assertEqual(row.status, QuestionImportRowStatus.IMPORTED)
+        self.assertIn("Warning", row.error_message)
 
     def test_student_cannot_search_approved_question_bank_directly(self):
         self.client.force_authenticate(self.student)

@@ -24,7 +24,7 @@ def get_question_queryset_for_user(user):
         "source",
         "created_by",
         "reviewed_by",
-    ).prefetch_related("options")
+    ).prefetch_related("options", "media")
 
     if is_platform_admin(user):
         return base_queryset
@@ -58,7 +58,7 @@ def get_approved_global_and_school_questions(user):
         "topic",
         "class_level",
         "source",
-    ).prefetch_related("options")
+    ).prefetch_related("options", "media")
 
 
 def get_questions_by_topic(
@@ -85,4 +85,4 @@ def get_questions_by_topic(
         "topic",
         "class_level",
         "source",
-    ).prefetch_related("options")
+    ).prefetch_related("options", "media")

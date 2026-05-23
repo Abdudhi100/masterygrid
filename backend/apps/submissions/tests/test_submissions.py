@@ -17,7 +17,7 @@ from apps.academics.models import (
 from apps.accounts.models import User
 from apps.assignments.services import create_assignment_from_topic, publish_assignment
 from apps.common.choices import AssignmentStatus, QuestionStatus, SubmissionStatus, UserRole
-from apps.question_bank.models import Question, QuestionOption
+from apps.question_bank.models import Question, QuestionMedia, QuestionOption
 from apps.schools.models import School
 from apps.submissions.models import Submission
 
@@ -118,7 +118,7 @@ class SubmissionWorkflowTests(TestCase):
         )
         self.client = APIClient()
 
-    def create_question(self, text, correct_label="A"):
+    def create_question(self, text, correct_label="A", with_media=False):
         question = Question.objects.create(
             school=self.school,
             subject=self.subject,
@@ -143,11 +143,31 @@ class SubmissionWorkflowTests(TestCase):
                 text=option_text,
                 is_correct=label == correct_label,
             )
+        if with_media:
+            QuestionMedia.objects.create(
+                question=question,
+                external_url="https://example.com/quadratic-diagram.png",
+                description="Quadratic diagram",
+                alt_text="A quadratic equation diagram",
+                caption="Diagram for the question",
+                is_primary=True,
+                created_by=self.teacher,
+            )
         return question
 
-    def create_published_assignment(self, *, teacher=None, class_arm=None, count=2):
+    def create_published_assignment(
+        self,
+        *,
+        teacher=None,
+        class_arm=None,
+        count=2,
+        first_question_has_media=False,
+    ):
         for index in range(count):
-            self.create_question(f"Question {index + 1}")
+            self.create_question(
+                f"Question {index + 1}",
+                with_media=first_question_has_media and index == 0,
+            )
 
         assignment = create_assignment_from_topic(
             teacher=teacher or self.teacher,
@@ -188,6 +208,8 @@ class SubmissionWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], SubmissionStatus.IN_PROGRESS)
         self.assertEqual(len(response.data["questions"]), 1)
+        self.assertFalse(response.data["questions"][0]["has_diagram"])
+        self.assertEqual(response.data["questions"][0]["media"], [])
 
     def test_student_cannot_start_draft_assignment(self):
         self.create_question("Draft question")
@@ -242,6 +264,54 @@ class SubmissionWorkflowTests(TestCase):
         self.assertNotIn("is_correct", response_text)
         self.assertNotIn("correct_option", response_text)
         self.assertNotIn("Explanation", response_text)
+
+    def test_assignment_attempt_includes_diagram_media_without_answers(self):
+        assignment = self.create_published_assignment(
+            count=1,
+            first_question_has_media=True,
+        )
+
+        response = self.start_submission(assignment)
+
+        self.assertEqual(response.status_code, 200)
+        question = response.data["questions"][0]
+        self.assertTrue(question["has_diagram"])
+        self.assertEqual(question["diagram_description"], "Quadratic diagram")
+        self.assertEqual(len(question["media"]), 1)
+        self.assertEqual(
+            question["media"][0]["external_url"],
+            "https://example.com/quadratic-diagram.png",
+        )
+        response_text = str(question)
+        self.assertNotIn("is_correct", response_text)
+        self.assertNotIn("correct_option", response_text)
+        self.assertNotIn("Explanation", response_text)
+
+    def test_assignment_result_includes_diagram_media(self):
+        assignment = self.create_published_assignment(
+            count=1,
+            first_question_has_media=True,
+        )
+        self.start_submission(assignment)
+        submission = Submission.objects.get(assignment=assignment, student=self.student)
+
+        response = self.client.post(
+            f"/api/submissions/{submission.id}/submit/",
+            self.answer_payload(submission),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        answer = response.data["answers"][0]
+        self.assertTrue(answer["has_diagram"])
+        self.assertEqual(answer["diagram_description"], "Quadratic diagram")
+        self.assertEqual(len(answer["media"]), 1)
+        self.assertEqual(
+            answer["media"][0]["external_url"],
+            "https://example.com/quadratic-diagram.png",
+        )
+        self.assertIn("correct_option", answer)
+        self.assertIn("explanation", answer)
 
     def test_student_can_submit_answers_and_grade_is_calculated(self):
         assignment = self.create_published_assignment(count=2)

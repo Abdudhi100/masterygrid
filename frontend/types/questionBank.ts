@@ -35,6 +35,33 @@ export type QuestionOption = {
   updated_at?: string;
 };
 
+export type QuestionMedia = {
+  id: number;
+  media_type: "image";
+  image: string | null;
+  image_url: string;
+  external_url: string;
+  original_filename: string;
+  description: string;
+  alt_text: string;
+  caption: string;
+  display_order: number;
+  is_primary: boolean;
+  is_active: boolean;
+  needs_manual_review: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type QuestionMediaPayload = {
+  external_url?: string;
+  description?: string;
+  alt_text?: string;
+  caption?: string;
+  is_primary?: boolean;
+  needs_manual_review?: boolean;
+};
+
 export type Question = {
   id: number;
   school: number | null;
@@ -59,8 +86,12 @@ export type Question = {
   reviewed_by_name?: string | null;
   reviewed_at: string | null;
   is_active: boolean;
+  has_diagram: boolean;
+  diagram_description: string;
+  needs_manual_review: boolean;
   is_usable_for_assignment?: boolean;
   options: QuestionOption[];
+  media: QuestionMedia[];
   created_at?: string;
   updated_at?: string;
 };
@@ -74,6 +105,10 @@ export type QuestionPayload = {
   explanation?: string;
   difficulty: QuestionDifficulty;
   options: QuestionOption[];
+  has_diagram?: boolean;
+  diagram_description?: string;
+  needs_manual_review?: boolean;
+  media?: QuestionMediaPayload[];
 };
 
 export type QuestionFilters = QueryParams & {

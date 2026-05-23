@@ -6,7 +6,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.academics.models import StudentEnrollment
-from apps.assignments.models import Assignment
 from apps.common.choices import AssignmentStatus, SubmissionStatus, UserRole
 from apps.submissions.models import StudentAnswer, Submission
 
@@ -104,6 +103,7 @@ def get_submission_questions_for_student(submission):
         "question",
     ).prefetch_related(
         "question__options",
+        "question__media",
     )
     by_id = {item.id: item for item in assignment_questions}
     return [by_id[item_id] for item_id in ordered_ids if item_id in by_id]

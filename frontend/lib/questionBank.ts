@@ -6,6 +6,8 @@ import type {
   QuestionImportBatch,
   QuestionImportFilters,
   QuestionImportRow,
+  QuestionMedia,
+  QuestionMediaPayload,
   QuestionPayload,
   QuestionSource,
   QuestionSourceFilters,
@@ -73,6 +75,26 @@ export const rejectQuestion = (id: number | string) =>
 
 export const archiveQuestion = (id: number | string) =>
   api.post<Question>(`/question-bank/questions/${id}/archive/`);
+
+export const getQuestionMedia = (questionId: number | string) =>
+  api.get<QuestionMedia[]>(`/question-bank/questions/${questionId}/media/`);
+
+export const createQuestionMedia = (
+  questionId: number | string,
+  payload: QuestionMediaPayload
+) =>
+  api.post<QuestionMedia>(
+    `/question-bank/questions/${questionId}/media/`,
+    payload
+  );
+
+export const updateQuestionMedia = (
+  mediaId: number | string,
+  payload: Partial<QuestionMediaPayload>
+) => api.patch<QuestionMedia>(`/question-bank/media/${mediaId}/`, payload);
+
+export const deleteQuestionMedia = (mediaId: number | string) =>
+  api.delete<void>(`/question-bank/media/${mediaId}/`);
 
 export const getQuestionImports = async (params?: QuestionImportFilters) => {
   const payload = await api.get<

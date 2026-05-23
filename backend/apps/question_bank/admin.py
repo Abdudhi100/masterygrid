@@ -4,6 +4,7 @@ from apps.question_bank.models import (
     Question,
     QuestionImportBatch,
     QuestionImportRow,
+    QuestionMedia,
     QuestionOption,
     QuestionSource,
 )
@@ -15,6 +16,22 @@ class QuestionOptionInline(admin.TabularInline):
     min_num = 4
     max_num = 4
     fields = ["label", "text", "is_correct"]
+
+
+class QuestionMediaInline(admin.TabularInline):
+    model = QuestionMedia
+    extra = 0
+    fields = [
+        "media_type",
+        "image",
+        "external_url",
+        "description",
+        "caption",
+        "display_order",
+        "is_primary",
+        "is_active",
+        "needs_manual_review",
+    ]
 
 
 @admin.register(QuestionSource)
@@ -43,6 +60,8 @@ class QuestionAdmin(admin.ModelAdmin):
         "difficulty",
         "status",
         "is_active",
+        "has_diagram",
+        "needs_manual_review",
         "created_by",
         "reviewed_by",
         "content_hash",
@@ -56,6 +75,8 @@ class QuestionAdmin(admin.ModelAdmin):
         "status",
         "source",
         "is_active",
+        "has_diagram",
+        "needs_manual_review",
     ]
     search_fields = [
         "question_text",
@@ -68,7 +89,7 @@ class QuestionAdmin(admin.ModelAdmin):
         "reviewed_by__email",
     ]
     readonly_fields = ["created_at", "updated_at", "reviewed_at", "content_hash"]
-    inlines = [QuestionOptionInline]
+    inlines = [QuestionOptionInline, QuestionMediaInline]
     autocomplete_fields = [
         "school",
         "subject",
@@ -95,6 +116,30 @@ class QuestionOptionAdmin(admin.ModelAdmin):
     @admin.display(description="Option text")
     def short_text(self, obj):
         return obj.text[:80]
+
+
+@admin.register(QuestionMedia)
+class QuestionMediaAdmin(admin.ModelAdmin):
+    list_display = [
+        "question",
+        "media_type",
+        "external_url",
+        "original_filename",
+        "is_primary",
+        "is_active",
+        "needs_manual_review",
+        "created_at",
+    ]
+    list_filter = ["media_type", "is_primary", "is_active", "needs_manual_review"]
+    search_fields = [
+        "question__question_text",
+        "external_url",
+        "original_filename",
+        "description",
+        "caption",
+    ]
+    readonly_fields = ["created_at", "updated_at"]
+    autocomplete_fields = ["question", "created_by"]
 
 
 @admin.register(QuestionImportBatch)

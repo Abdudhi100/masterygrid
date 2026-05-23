@@ -11,6 +11,8 @@ from apps.question_bank.models import (
     QuestionImportBatch,
     QuestionImportFileType,
     QuestionImportRow,
+    QuestionMedia,
+    QuestionMediaType,
     QuestionOption,
     QuestionOptionLabel,
     QuestionSource,
@@ -76,8 +78,167 @@ class QuestionOptionSerializer(serializers.ModelSerializer):
         return value.strip()
 
 
+class QuestionMediaSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = QuestionMedia
+        fields = [
+            "id",
+            "media_type",
+            "image",
+            "image_url",
+            "external_url",
+            "original_filename",
+            "description",
+            "alt_text",
+            "caption",
+            "display_order",
+            "is_primary",
+            "is_active",
+            "needs_manual_review",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "image_url", "created_by", "created_at", "updated_at"]
+
+    def get_image_url(self, obj):
+        if not obj.image:
+            return ""
+
+        url = obj.image.url
+        request = self.context.get("request")
+        if request:
+            return request.build_absolute_uri(url)
+        return url
+
+    def validate_media_type(self, value):
+        if value != QuestionMediaType.IMAGE:
+            raise serializers.ValidationError("Only image media is supported for now.")
+        return value
+
+    def validate(self, attrs):
+        instance = self.instance
+        data = {}
+        if instance:
+            for field in [
+                "question",
+                "media_type",
+                "image",
+                "external_url",
+                "original_filename",
+                "description",
+                "alt_text",
+                "caption",
+                "display_order",
+                "is_primary",
+                "is_active",
+                "needs_manual_review",
+                "created_by",
+            ]:
+                data[field] = getattr(instance, field)
+
+        question = self.context.get("question") or data.get("question")
+        if question:
+            data["question"] = question
+        model_attrs = dict(attrs)
+        model_attrs.pop("options", None)
+        model_attrs.pop("media", None)
+        data.update(model_attrs)
+
+        media = QuestionMedia(**data)
+        if instance:
+            media.pk = instance.pk
+
+        try:
+            media.full_clean()
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        question = self.context.get("question")
+        request = self.context.get("request")
+        if question is None:
+            raise serializers.ValidationError({"question": "Question is required."})
+
+        if "media_type" not in validated_data:
+            validated_data["media_type"] = QuestionMediaType.IMAGE
+
+        if validated_data.get("is_primary"):
+            QuestionMedia.objects.filter(
+                question=question,
+                is_active=True,
+                is_primary=True,
+            ).update(is_primary=False)
+
+        media = QuestionMedia(
+            question=question,
+            created_by=getattr(request, "user", None),
+            **validated_data,
+        )
+        try:
+            media.full_clean()
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+        media.save()
+        return media
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        if validated_data.get("is_primary"):
+            QuestionMedia.objects.filter(
+                question=instance.question,
+                is_active=True,
+                is_primary=True,
+            ).exclude(pk=instance.pk).update(is_primary=False)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        try:
+            instance.full_clean()
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+        instance.save()
+        return instance
+
+
+class StudentQuestionMediaSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = QuestionMedia
+        fields = [
+            "id",
+            "media_type",
+            "image_url",
+            "external_url",
+            "description",
+            "alt_text",
+            "caption",
+            "display_order",
+            "is_primary",
+        ]
+        read_only_fields = fields
+
+    def get_image_url(self, obj):
+        if not obj.image:
+            return ""
+
+        url = obj.image.url
+        request = self.context.get("request")
+        if request:
+            return request.build_absolute_uri(url)
+        return url
+
+
 class QuestionSerializer(serializers.ModelSerializer):
     options = QuestionOptionSerializer(many=True, read_only=True)
+    media = QuestionMediaSerializer(many=True, read_only=True)
     school_name = serializers.CharField(source="school.name", read_only=True)
     subject_name = serializers.CharField(source="subject.name", read_only=True)
     topic_title = serializers.CharField(source="topic.title", read_only=True)
@@ -114,8 +275,12 @@ class QuestionSerializer(serializers.ModelSerializer):
             "reviewed_by_name",
             "reviewed_at",
             "is_active",
+            "has_diagram",
+            "diagram_description",
+            "needs_manual_review",
             "is_usable_for_assignment",
             "options",
+            "media",
             "created_at",
             "updated_at",
         ]
@@ -135,6 +300,7 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 class QuestionCreateUpdateSerializer(QuestionSerializer):
     options = QuestionOptionSerializer(many=True, required=False)
+    media = QuestionMediaSerializer(many=True, required=False)
     school = serializers.PrimaryKeyRelatedField(
         queryset=School.objects.filter(is_active=True),
         required=False,
@@ -260,7 +426,10 @@ class QuestionCreateUpdateSerializer(QuestionSerializer):
                 "is_active",
             ]:
                 data[field] = getattr(instance, field)
-        data.update(attrs)
+        model_attrs = dict(attrs)
+        model_attrs.pop("options", None)
+        model_attrs.pop("media", None)
+        data.update(model_attrs)
 
         question = Question(**data)
         if instance:
@@ -276,6 +445,7 @@ class QuestionCreateUpdateSerializer(QuestionSerializer):
     @transaction.atomic
     def create(self, validated_data):
         options_data = validated_data.pop("options", None)
+        media_data = validated_data.pop("media", None)
         if options_data is None:
             raise serializers.ValidationError(
                 {"options": "Exactly four options are required."}
@@ -289,11 +459,14 @@ class QuestionCreateUpdateSerializer(QuestionSerializer):
 
         question.save()
         self._replace_options(question, options_data)
+        if media_data is not None:
+            self._replace_media(question, media_data)
         return question
 
     @transaction.atomic
     def update(self, instance, validated_data):
         options_data = validated_data.pop("options", None)
+        media_data = validated_data.pop("media", None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -307,6 +480,8 @@ class QuestionCreateUpdateSerializer(QuestionSerializer):
 
         if options_data is not None:
             self._replace_options(instance, options_data)
+        if media_data is not None:
+            self._replace_media(instance, media_data)
 
         return instance
 
@@ -338,6 +513,25 @@ class QuestionCreateUpdateSerializer(QuestionSerializer):
         except DjangoValidationError as exc:
             raise_drf_validation_error(exc)
         question.save(update_fields=["content_hash", "updated_at"])
+
+    def _replace_media(self, question, media_data):
+        question.media.all().delete()
+
+        for index, media_item in enumerate(media_data, start=1):
+            payload = dict(media_item)
+            payload.setdefault("media_type", QuestionMediaType.IMAGE)
+            payload.setdefault("display_order", index)
+            if len(media_data) == 1:
+                payload.setdefault("is_primary", True)
+            serializer = QuestionMediaSerializer(
+                data=payload,
+                context={
+                    **self.context,
+                    "question": question,
+                },
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
 
 
 class QuestionReviewSerializer(serializers.Serializer):
