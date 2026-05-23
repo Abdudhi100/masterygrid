@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { AISuggestionRequestModal } from "@/components/ai-generation/AISuggestionRequestModal";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
   QuestionDifficultyBadge,
@@ -168,9 +169,14 @@ export function QuestionDetailContent({
           question.topic_title ?? "Topic"
         } - ${question.class_level_name ?? "Class level"}`}
         actions={
-          <Link href={basePath}>
-            <Button variant="secondary">Back to Question Bank</Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`${basePath}/ai-suggestions`}>
+              <Button variant="secondary">AI Suggestions</Button>
+            </Link>
+            <Link href={basePath}>
+              <Button variant="secondary">Back to Question Bank</Button>
+            </Link>
+          </div>
         }
       />
 
@@ -208,6 +214,10 @@ export function QuestionDetailContent({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <AISuggestionRequestModal
+              questionId={question.id}
+              basePath={basePath}
+            />
             {canEditQuestion(question, mode, user) ? (
               <Link href={`${basePath}/${question.id}?mode=edit`}>
                 <Button variant="secondary">Edit</Button>

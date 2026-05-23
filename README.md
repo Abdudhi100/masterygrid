@@ -108,6 +108,18 @@ cd backend
 See [docs/DEMO_DATA.md](docs/DEMO_DATA.md) for credentials and the recommended
 test flow.
 
+## Question Import
+
+Trusted JAMB/past-exam questions can be imported into the question bank as draft
+questions for review. See [docs/QUESTION_IMPORT.md](docs/QUESTION_IMPORT.md) for
+the CSV format and workflow.
+
+## AI Question Intelligence
+
+AI can suggest topic tags, difficulty, explanations, and quality warnings for
+existing question-bank items without auto-approving or generating student-facing
+questions. See [docs/AI_QUESTION_INTELLIGENCE.md](docs/AI_QUESTION_INTELLIGENCE.md).
+
 ## Deployment
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Render/Railway backend setup,

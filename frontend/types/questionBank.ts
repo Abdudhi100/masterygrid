@@ -50,6 +50,7 @@ export type Question = {
   source_type?: QuestionSourceType | null;
   question_text: string;
   explanation: string;
+  content_hash?: string;
   difficulty: QuestionDifficulty;
   status: QuestionStatus;
   created_by: number | null;
@@ -100,5 +101,61 @@ export type QuestionSourceFilters = QueryParams & {
   exam_body?: string;
   year?: number | string;
   is_active?: boolean | string;
+  search?: string;
+};
+
+export type QuestionImportStatus =
+  | "uploaded"
+  | "processing"
+  | "completed"
+  | "completed_with_errors"
+  | "failed";
+
+export type QuestionImportRowStatus =
+  | "pending"
+  | "imported"
+  | "failed"
+  | "duplicate";
+
+export type QuestionImportFileType = "csv" | "xlsx" | "json";
+
+export type QuestionImportBatch = {
+  id: number;
+  school: number | null;
+  school_name?: string | null;
+  uploaded_by: number;
+  uploaded_by_name?: string | null;
+  source: number | null;
+  source_name?: string | null;
+  title: string;
+  original_filename: string;
+  file_type: QuestionImportFileType;
+  status: QuestionImportStatus;
+  total_rows: number;
+  successful_rows: number;
+  failed_rows: number;
+  duplicate_rows: number;
+  error_summary: string;
+  created_at?: string;
+  updated_at?: string;
+  processed_at: string | null;
+};
+
+export type QuestionImportRow = {
+  id: number;
+  batch: number;
+  row_number: number;
+  raw_data: Record<string, unknown>;
+  status: QuestionImportRowStatus;
+  error_message: string;
+  question: number | null;
+  question_text?: string | null;
+  content_hash: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type QuestionImportFilters = QueryParams & {
+  status?: QuestionImportStatus | "";
   search?: string;
 };

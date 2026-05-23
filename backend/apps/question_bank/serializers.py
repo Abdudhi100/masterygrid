@@ -7,11 +7,22 @@ from apps.academics.models import ClassLevel, Subject, Topic
 from apps.common.choices import QuestionStatus, UserRole
 from apps.question_bank.models import (
     Question,
+    QuestionDifficulty,
+    QuestionImportBatch,
+    QuestionImportFileType,
+    QuestionImportRow,
     QuestionOption,
     QuestionOptionLabel,
     QuestionSource,
+    QuestionSourceType,
 )
-from apps.question_bank.services import validate_question_options
+from apps.question_bank.selectors import is_platform_admin
+from apps.question_bank.services import (
+    build_question_content_hash,
+    create_pending_import_rows,
+    load_csv_import_rows,
+    validate_question_options,
+)
 from apps.schools.models import School
 
 User = get_user_model()
@@ -94,6 +105,7 @@ class QuestionSerializer(serializers.ModelSerializer):
             "source_type",
             "question_text",
             "explanation",
+            "content_hash",
             "difficulty",
             "status",
             "created_by",
@@ -114,6 +126,7 @@ class QuestionSerializer(serializers.ModelSerializer):
             "reviewed_by",
             "reviewed_by_name",
             "reviewed_at",
+            "content_hash",
             "is_usable_for_assignment",
             "created_at",
             "updated_at",
@@ -150,6 +163,7 @@ class QuestionCreateUpdateSerializer(QuestionSerializer):
             "reviewed_by",
             "reviewed_by_name",
             "reviewed_at",
+            "content_hash",
             "is_usable_for_assignment",
             "created_at",
             "updated_at",
@@ -312,6 +326,158 @@ class QuestionCreateUpdateSerializer(QuestionSerializer):
                 raise_drf_validation_error(exc)
             option.save()
 
+        question.content_hash = build_question_content_hash(
+            question_text=question.question_text,
+            subject=question.subject,
+            topic=question.topic,
+            class_level=question.class_level,
+            options=options_data,
+        )
+        try:
+            question.full_clean()
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+        question.save(update_fields=["content_hash", "updated_at"])
+
 
 class QuestionReviewSerializer(serializers.Serializer):
     detail = serializers.CharField(read_only=True)
+
+
+class QuestionImportBatchSerializer(serializers.ModelSerializer):
+    school_name = serializers.CharField(source="school.name", read_only=True)
+    uploaded_by_name = serializers.CharField(source="uploaded_by.full_name", read_only=True)
+    source_name = serializers.CharField(source="source.name", read_only=True)
+
+    class Meta:
+        model = QuestionImportBatch
+        fields = [
+            "id",
+            "school",
+            "school_name",
+            "uploaded_by",
+            "uploaded_by_name",
+            "source",
+            "source_name",
+            "title",
+            "original_filename",
+            "file_type",
+            "status",
+            "total_rows",
+            "successful_rows",
+            "failed_rows",
+            "duplicate_rows",
+            "error_summary",
+            "processed_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class QuestionImportRowSerializer(serializers.ModelSerializer):
+    question_text = serializers.CharField(source="question.question_text", read_only=True)
+
+    class Meta:
+        model = QuestionImportRow
+        fields = [
+            "id",
+            "batch",
+            "row_number",
+            "raw_data",
+            "status",
+            "error_message",
+            "question",
+            "question_text",
+            "content_hash",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class QuestionImportCreateSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=255)
+    source = serializers.PrimaryKeyRelatedField(
+        queryset=QuestionSource.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    school = serializers.PrimaryKeyRelatedField(
+        queryset=School.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    file = serializers.FileField(write_only=True)
+
+    def validate_file(self, value):
+        filename = getattr(value, "name", "")
+        if not filename.lower().endswith(".csv"):
+            raise serializers.ValidationError("Only CSV imports are supported for now.")
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError("Authentication is required.")
+
+        target_school = attrs.get("school")
+        if is_platform_admin(user):
+            return attrs
+
+        if user.role == UserRole.SCHOOL_ADMIN:
+            if not user.school_id:
+                raise serializers.ValidationError(
+                    {"school": "School admins must belong to a school."}
+                )
+            if target_school and target_school.id != user.school_id:
+                raise serializers.ValidationError(
+                    {"school": "School admins can only import for their own school."}
+                )
+            attrs["school"] = user.school
+            return attrs
+
+        allow_teacher_imports = self.context.get("allow_teacher_imports", False)
+        if allow_teacher_imports and user.role == UserRole.TEACHER and user.school_id:
+            if target_school and target_school.id != user.school_id:
+                raise serializers.ValidationError(
+                    {"school": "Teachers can only import for their own school."}
+                )
+            attrs["school"] = user.school
+            return attrs
+
+        raise serializers.ValidationError("You cannot import question bank content.")
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        uploaded_file = validated_data.pop("file")
+        rows = load_csv_import_rows(uploaded_file)
+        batch = QuestionImportBatch.objects.create(
+            uploaded_by=request.user,
+            school=validated_data.get("school"),
+            source=validated_data.get("source"),
+            title=validated_data["title"],
+            original_filename=getattr(uploaded_file, "name", ""),
+            file_type=QuestionImportFileType.CSV,
+        )
+        create_pending_import_rows(batch, rows)
+        return batch
+
+
+class ApprovedQuestionSearchSerializer(serializers.Serializer):
+    subject = serializers.IntegerField(required=False)
+    topic = serializers.IntegerField(required=False)
+    class_level = serializers.IntegerField(required=False)
+    difficulty = serializers.ChoiceField(
+        choices=QuestionDifficulty.values,
+        required=False,
+    )
+    source_type = serializers.ChoiceField(
+        choices=QuestionSourceType.values,
+        required=False,
+    )
+    exam_body = serializers.CharField(required=False, allow_blank=True)
+    year = serializers.IntegerField(required=False)
+    count = serializers.IntegerField(required=False, min_value=1, max_value=100)
+    random = serializers.BooleanField(required=False, default=False)

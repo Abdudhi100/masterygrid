@@ -120,6 +120,17 @@ export function QuestionBankList({ mode, basePath }: QuestionBankListProps) {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const status = searchParams.get("status");
+    if (status && statusOptions.some((option) => option.value === status)) {
+      setFilters((current) => ({
+        ...current,
+        status: status as QuestionStatus
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
     async function loadReferences() {
       try {
         const [subjectsData, classLevelsData, topicsData, sourcesData] =
@@ -213,11 +224,33 @@ export function QuestionBankList({ mode, basePath }: QuestionBankListProps) {
         title={title}
         description={description}
         actions={
-          <Link href={`${basePath}/new`}>
-            <Button>Create Question</Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`${basePath}/ai-suggestions`}>
+              <Button variant="secondary">AI Suggestions</Button>
+            </Link>
+            {mode === "admin" ? (
+              <>
+                <Link href="/admin/question-bank/imports/new">
+                  <Button variant="secondary">Import CSV</Button>
+                </Link>
+                <Link href="/admin/question-bank/imports">
+                  <Button variant="secondary">Import History</Button>
+                </Link>
+              </>
+            ) : null}
+            <Link href={`${basePath}/new`}>
+              <Button>Create Question</Button>
+            </Link>
+          </div>
         }
       />
+
+      {mode === "admin" ? (
+        <div className="mb-4 rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-warning">
+          Imported CSV questions are saved as drafts and must be approved before
+          assignment generation can use them.
+        </div>
+      ) : null}
 
       {success ? (
         <div className="mb-4 rounded-md border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-success">

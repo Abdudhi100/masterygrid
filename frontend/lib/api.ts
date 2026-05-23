@@ -118,8 +118,9 @@ async function request<T>(
 ): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
 
-  if (body !== undefined) {
+  if (body !== undefined && !isFormData) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -131,7 +132,12 @@ async function request<T>(
   const response = await fetch(`${API_BASE_URL}${normalizePath(path)}`, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body)
+    body:
+      body === undefined
+        ? undefined
+        : isFormData
+          ? body
+          : JSON.stringify(body)
   });
 
   if (response.status === 401 && !options.skipAuth && !hasRetried) {

@@ -3,6 +3,9 @@ import type { ListResponse } from "@/types/academics";
 import type {
   Question,
   QuestionFilters,
+  QuestionImportBatch,
+  QuestionImportFilters,
+  QuestionImportRow,
   QuestionPayload,
   QuestionSource,
   QuestionSourceFilters,
@@ -70,3 +73,41 @@ export const rejectQuestion = (id: number | string) =>
 
 export const archiveQuestion = (id: number | string) =>
   api.post<Question>(`/question-bank/questions/${id}/archive/`);
+
+export const getQuestionImports = async (params?: QuestionImportFilters) => {
+  const payload = await api.get<
+    QuestionImportBatch[] | ListResponse<QuestionImportBatch>
+  >(`/question-bank/imports/${queryString(params)}`);
+  return unwrapList(payload);
+};
+
+export const getQuestionImport = (id: number | string) =>
+  api.get<QuestionImportBatch>(`/question-bank/imports/${id}/`);
+
+export const getQuestionImportRows = async (id: number | string) => {
+  const payload = await api.get<
+    QuestionImportRow[] | ListResponse<QuestionImportRow>
+  >(`/question-bank/imports/${id}/rows/?page_size=100`);
+
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const rows = [...payload.results];
+  let page = 2;
+  while (payload.count > rows.length) {
+    const pagePayload = await api.get<ListResponse<QuestionImportRow>>(
+      `/question-bank/imports/${id}/rows/?page_size=100&page=${page}`
+    );
+    rows.push(...pagePayload.results);
+    if (!pagePayload.next) {
+      break;
+    }
+    page += 1;
+  }
+
+  return rows;
+};
+
+export const createQuestionImport = (formData: FormData) =>
+  api.post<QuestionImportBatch>("/question-bank/imports/", formData);

@@ -29,6 +29,27 @@ class QuestionOptionLabel(models.TextChoices):
     D = "D", "D"
 
 
+class QuestionImportFileType(models.TextChoices):
+    CSV = "csv", "CSV"
+    XLSX = "xlsx", "Excel"
+    JSON = "json", "JSON"
+
+
+class QuestionImportBatchStatus(models.TextChoices):
+    UPLOADED = "uploaded", "Uploaded"
+    PROCESSING = "processing", "Processing"
+    COMPLETED = "completed", "Completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors", "Completed With Errors"
+    FAILED = "failed", "Failed"
+
+
+class QuestionImportRowStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    IMPORTED = "imported", "Imported"
+    FAILED = "failed", "Failed"
+    DUPLICATE = "duplicate", "Duplicate"
+
+
 class QuestionSource(TimeStampedModel):
     name = models.CharField(max_length=255)
     source_type = models.CharField(
@@ -88,6 +109,7 @@ class Question(TimeStampedModel):
     )
     question_text = models.TextField()
     explanation = models.TextField(blank=True)
+    content_hash = models.CharField(max_length=64, blank=True, db_index=True)
     difficulty = models.CharField(
         max_length=16,
         choices=QuestionDifficulty.choices,
@@ -231,3 +253,92 @@ class QuestionOption(TimeStampedModel):
                 raise ValidationError(
                     {"text": "Duplicate option text is not allowed for the same question."}
                 )
+
+
+class QuestionImportBatch(TimeStampedModel):
+    school = models.ForeignKey(
+        "schools.School",
+        related_name="question_import_batches",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="question_import_batches",
+        on_delete=models.PROTECT,
+    )
+    source = models.ForeignKey(
+        QuestionSource,
+        related_name="import_batches",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    title = models.CharField(max_length=255)
+    original_filename = models.CharField(max_length=255, blank=True)
+    file_type = models.CharField(
+        max_length=16,
+        choices=QuestionImportFileType.choices,
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=QuestionImportBatchStatus.choices,
+        default=QuestionImportBatchStatus.UPLOADED,
+    )
+    total_rows = models.PositiveIntegerField(default=0)
+    successful_rows = models.PositiveIntegerField(default=0)
+    failed_rows = models.PositiveIntegerField(default=0)
+    duplicate_rows = models.PositiveIntegerField(default=0)
+    error_summary = models.TextField(blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["school", "status"]),
+            models.Index(fields=["uploaded_by", "status"]),
+        ]
+
+    def __str__(self):
+        return self.title
+
+
+class QuestionImportRow(TimeStampedModel):
+    batch = models.ForeignKey(
+        QuestionImportBatch,
+        related_name="rows",
+        on_delete=models.CASCADE,
+    )
+    row_number = models.PositiveIntegerField()
+    raw_data = models.JSONField(default=dict)
+    status = models.CharField(
+        max_length=16,
+        choices=QuestionImportRowStatus.choices,
+        default=QuestionImportRowStatus.PENDING,
+    )
+    error_message = models.TextField(blank=True)
+    question = models.ForeignKey(
+        Question,
+        related_name="import_rows",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    content_hash = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ["batch", "row_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["batch", "row_number"],
+                name="unique_question_import_row_number_per_batch",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["batch", "status"]),
+            models.Index(fields=["content_hash"]),
+        ]
+
+    def __str__(self):
+        return f"{self.batch_id} - row {self.row_number}"

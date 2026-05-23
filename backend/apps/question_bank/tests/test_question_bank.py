@@ -1,10 +1,17 @@
 from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from apps.academics.models import ClassLevel, Subject, Topic
 from apps.accounts.models import User
 from apps.common.choices import QuestionStatus, UserRole
-from apps.question_bank.models import Question, QuestionSource
+from apps.question_bank.models import (
+    Question,
+    QuestionImportBatch,
+    QuestionImportRowStatus,
+    QuestionOption,
+    QuestionSource,
+)
 from apps.question_bank.services import approve_question, get_approved_questions_for_topic
 from apps.schools.models import School
 
@@ -26,6 +33,13 @@ class QuestionBankTests(TestCase):
             role=UserRole.SCHOOL_ADMIN,
             school=self.school,
         )
+        self.student = User.objects.create_user(
+            email="student@example.com",
+            password="StrongPass123",
+            full_name="Demo Student",
+            role=UserRole.STUDENT,
+            school=self.school,
+        )
         self.class_level = ClassLevel.objects.create(
             school=self.school,
             name="SS2",
@@ -42,6 +56,89 @@ class QuestionBankTests(TestCase):
             source_type="teacher_created",
         )
         self.client = APIClient()
+
+    def csv_upload(self, rows):
+        header = [
+            "subject",
+            "class_level",
+            "topic",
+            "source_name",
+            "source_type",
+            "exam_body",
+            "year",
+            "difficulty",
+            "question_text",
+            "option_a",
+            "option_b",
+            "option_c",
+            "option_d",
+            "correct_option",
+            "explanation",
+        ]
+        lines = [",".join(header)]
+        for row in rows:
+            values = [str(row.get(column, "")).replace(",", ";") for column in header]
+            lines.append(",".join(values))
+        return SimpleUploadedFile(
+            "questions.csv",
+            "\n".join(lines).encode("utf-8"),
+            content_type="text/csv",
+        )
+
+    def import_row(self, **overrides):
+        data = {
+            "subject": "Mathematics",
+            "class_level": "SS2",
+            "topic": "Quadratic Equations",
+            "source_name": "JAMB Mathematics",
+            "source_type": "jamb_past_question",
+            "exam_body": "JAMB",
+            "year": "2024",
+            "difficulty": "medium",
+            "question_text": "What is the sum of roots of x^2 - 5x + 6 = 0?",
+            "option_a": "2",
+            "option_b": "3",
+            "option_c": "5",
+            "option_d": "6",
+            "correct_option": "C",
+            "explanation": "The sum of roots is -b/a = 5.",
+        }
+        data.update(overrides)
+        return data
+
+    def create_stored_question(
+        self,
+        *,
+        status=QuestionStatus.DRAFT,
+        difficulty="medium",
+        is_active=True,
+        question_text="Stored question?",
+    ):
+        question = Question.objects.create(
+            school=self.school,
+            subject=self.subject,
+            topic=self.topic,
+            class_level=self.class_level,
+            source=self.source,
+            question_text=question_text,
+            difficulty=difficulty,
+            status=status,
+            is_active=is_active,
+            created_by=self.teacher,
+        )
+        for label, text, is_correct in [
+            ("A", "Option A", False),
+            ("B", "Option B", True),
+            ("C", "Option C", False),
+            ("D", "Option D", False),
+        ]:
+            QuestionOption.objects.create(
+                question=question,
+                label=label,
+                text=text,
+                is_correct=is_correct,
+            )
+        return question
 
     def payload(self, **overrides):
         data = {
@@ -144,3 +241,121 @@ class QuestionBankTests(TestCase):
             class_level=self.class_level,
         )
         self.assertIn(question, questions)
+
+    def test_school_admin_can_import_csv_for_own_school(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "JAMB Mathematics Import",
+                "file": self.csv_upload([self.import_row()]),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "completed")
+        self.assertEqual(response.data["successful_rows"], 1)
+        question = Question.objects.get(
+            question_text="What is the sum of roots of x^2 - 5x + 6 = 0?"
+        )
+        self.assertEqual(question.status, QuestionStatus.DRAFT)
+        self.assertEqual(question.school, self.school)
+        self.assertEqual(question.options.count(), 4)
+        self.assertEqual(question.options.get(is_correct=True).label, "C")
+        self.assertFalse(question.is_usable_for_assignment)
+
+    def test_student_cannot_import_questions(self):
+        self.client.force_authenticate(self.student)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "Blocked Import",
+                "file": self.csv_upload([self.import_row()]),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_invalid_import_row_is_marked_failed(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "Invalid Import",
+                "file": self.csv_upload([self.import_row(difficulty="impossible")]),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "completed_with_errors")
+        self.assertEqual(response.data["failed_rows"], 1)
+        batch = QuestionImportBatch.objects.get(id=response.data["id"])
+        row = batch.rows.get()
+        self.assertEqual(row.status, QuestionImportRowStatus.FAILED)
+        self.assertIn("Difficulty", row.error_message)
+
+    def test_duplicate_import_row_is_marked_duplicate(self):
+        self.client.force_authenticate(self.school_admin)
+        duplicate = self.import_row()
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "Duplicate Import",
+                "file": self.csv_upload([duplicate, duplicate]),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["successful_rows"], 1)
+        self.assertEqual(response.data["duplicate_rows"], 1)
+        batch = QuestionImportBatch.objects.get(id=response.data["id"])
+        self.assertEqual(
+            batch.rows.filter(status=QuestionImportRowStatus.DUPLICATE).count(),
+            1,
+        )
+
+    def test_approved_search_returns_only_approved_active_questions(self):
+        approved = self.create_stored_question(
+            status=QuestionStatus.APPROVED,
+            difficulty="hard",
+            question_text="Approved hard question?",
+        )
+        self.create_stored_question(
+            status=QuestionStatus.DRAFT,
+            difficulty="hard",
+            question_text="Draft hard question?",
+        )
+        self.create_stored_question(
+            status=QuestionStatus.APPROVED,
+            difficulty="hard",
+            is_active=False,
+            question_text="Inactive approved question?",
+        )
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.get(
+            "/api/question-bank/questions/search-approved/",
+            {
+                "subject": self.subject.id,
+                "topic": self.topic.id,
+                "class_level": self.class_level.id,
+                "difficulty": "hard",
+                "count": 5,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["available_count"], 1)
+        self.assertIn("Only 1 approved active question", response.data["message"])
+        self.assertEqual(response.data["results"][0]["id"], approved.id)
+        self.assertEqual(len(response.data["results"][0]["options"]), 4)
+
+    def test_student_cannot_search_approved_question_bank_directly(self):
+        self.client.force_authenticate(self.student)
+        response = self.client.get("/api/question-bank/questions/search-approved/")
+
+        self.assertEqual(response.status_code, 403)

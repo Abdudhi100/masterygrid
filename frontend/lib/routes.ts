@@ -14,6 +14,8 @@ export const adminNavItems: NavItem[] = [
   { label: "Teacher Assignments", href: "/admin/teacher-assignments" },
   { label: "Student Enrollments", href: "/admin/student-enrollments" },
   { label: "Question Bank", href: "/admin/question-bank" },
+  { label: "AI Suggestions", href: "/admin/question-bank/ai-suggestions" },
+  { label: "Question Imports", href: "/admin/question-bank/imports" },
   { label: "Question Sources", href: "/admin/question-bank/sources" },
   { label: "Analytics", href: "/admin/analytics" },
   { label: "Class Performance", href: "/admin/analytics/classes" },
@@ -30,7 +32,8 @@ export const teacherNavItems: NavItem[] = [
   { label: "Results", href: "/teacher/results" },
   { label: "Weak Students", href: "/teacher/weak-students" },
   { label: "Weak Topics", href: "/teacher/weak-topics" },
-  { label: "Question Bank", href: "/teacher/question-bank" }
+  { label: "Question Bank", href: "/teacher/question-bank" },
+  { label: "AI Suggestions", href: "/teacher/question-bank/ai-suggestions" }
 ];
 
 export const studentNavItems: NavItem[] = [
