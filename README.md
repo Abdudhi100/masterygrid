@@ -135,7 +135,9 @@ practice sessions and approved active question-bank availability only. See
 ## E2E Testing
 
 Playwright browser tests cover critical flows across local or deployed demo
-environments. See [docs/E2E_TESTING.md](docs/E2E_TESTING.md).
+environments. GitHub Actions runs safe CI checks by default and can run smoke or
+seeded E2E tests against staging/demo targets. See
+[docs/E2E_TESTING.md](docs/E2E_TESTING.md).
 
 ## Deployment
 

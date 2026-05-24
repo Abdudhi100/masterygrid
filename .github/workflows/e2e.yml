@@ -1,0 +1,134 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Which E2E suite should run?"
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - full
+  push:
+    branches:
+      - main
+
+jobs:
+  playwright:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+
+    env:
+      E2E_FRONTEND_BASE_URL: ${{ secrets.E2E_FRONTEND_BASE_URL }}
+      E2E_BACKEND_API_URL: ${{ secrets.E2E_BACKEND_API_URL }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_TEACHER_EMAIL: ${{ secrets.E2E_TEACHER_EMAIL }}
+      E2E_TEACHER_PASSWORD: ${{ secrets.E2E_TEACHER_PASSWORD }}
+      E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
+      E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
+      E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+      E2E_ALLOW_PRODUCTION: ${{ secrets.E2E_ALLOW_PRODUCTION }}
+
+    steps:
+      - name: Decide E2E scope
+        id: guard
+        shell: bash
+        run: |
+          missing=()
+          for name in \
+            E2E_FRONTEND_BASE_URL \
+            E2E_BACKEND_API_URL \
+            E2E_ADMIN_EMAIL \
+            E2E_ADMIN_PASSWORD \
+            E2E_TEACHER_EMAIL \
+            E2E_TEACHER_PASSWORD \
+            E2E_STUDENT_EMAIL \
+            E2E_STUDENT_PASSWORD
+          do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "E2E secrets are incomplete; skipping Playwright run."
+            echo "Missing: ${missing[*]}"
+            echo "run_tests=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          requested_suite="${{ github.event.inputs.suite || 'smoke' }}"
+          event_name="${{ github.event_name }}"
+          allow_production="$(echo "${E2E_ALLOW_PRODUCTION:-false}" | tr '[:upper:]' '[:lower:]')"
+          combined_urls="$(echo "$E2E_FRONTEND_BASE_URL $E2E_BACKEND_API_URL" | tr '[:upper:]' '[:lower:]')"
+
+          safe_seed_target=false
+          if [[ "$combined_urls" == *"localhost"* ]] || \
+             [[ "$combined_urls" == *"127.0.0.1"* ]] || \
+             [[ "$combined_urls" == *"staging"* ]] || \
+             [[ "$combined_urls" == *"stage"* ]] || \
+             [[ "$combined_urls" == *"demo"* ]] || \
+             [[ "$combined_urls" == *"preview"* ]]; then
+            safe_seed_target=true
+          fi
+
+          run_full=false
+          if [ "$event_name" = "workflow_dispatch" ] && [ "$requested_suite" = "full" ]; then
+            if [ "$allow_production" = "true" ] || [ "$safe_seed_target" = "true" ]; then
+              run_full=true
+            else
+              echo "Full seeded E2E requested, but target does not look like staging/demo/local and E2E_ALLOW_PRODUCTION is not true."
+              echo "Running smoke E2E only."
+            fi
+          fi
+
+          if [ "$run_full" = "true" ]; then
+            echo "specs=e2e/tests/01-auth-smoke.spec.ts e2e/tests/02-seeded-practice-setup.spec.ts e2e/tests/03-student-practice-flow.spec.ts e2e/tests/04-assignment-flow.spec.ts" >> "$GITHUB_OUTPUT"
+            echo "Running full seeded E2E suite."
+          else
+            echo "specs=e2e/tests/01-auth-smoke.spec.ts" >> "$GITHUB_OUTPUT"
+            echo "Running smoke E2E suite."
+          fi
+
+          echo "run_tests=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.guard.outputs.run_tests == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        if: steps.guard.outputs.run_tests == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        if: steps.guard.outputs.run_tests == 'true'
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        if: steps.guard.outputs.run_tests == 'true'
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright
+        if: steps.guard.outputs.run_tests == 'true'
+        working-directory: frontend
+        run: npm run e2e -- ${{ steps.guard.outputs.specs }}
+
+      - name: Upload Playwright artifacts
+        if: always() && steps.guard.outputs.run_tests == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/

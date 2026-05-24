@@ -110,7 +110,78 @@ npm.cmd run e2e
 
 Avoid running future mutating tests against real production data. The helper in
 `e2e/utils/env.ts` blocks production-like mutating test targets unless
-`E2E_ALLOW_PRODUCTION=true` is set intentionally.
+`E2E_ALLOW_PRODUCTION=true` is set intentionally. URLs containing `staging`,
+`stage`, `demo`, or `preview` are treated as non-production E2E targets.
+
+## GitHub Actions
+
+MasteryGrid has two CI workflows:
+
+- `.github/workflows/ci.yml` runs safe checks on every push or pull request to
+  `main`.
+- `.github/workflows/e2e.yml` runs Playwright against deployed or staging URLs
+  when E2E secrets are configured.
+
+The default CI workflow runs:
+
+- backend dependency install
+- `python manage.py check`
+- `python manage.py makemigrations --check --dry-run`
+- frontend `npm ci`
+- frontend `npm run type-check`
+- frontend `npm run lint`
+- frontend `npm run build`
+
+The backend job uses a disposable PostgreSQL service inside GitHub Actions. It
+does not use production database credentials.
+
+### E2E Secrets
+
+Configure these repository secrets before running the E2E workflow:
+
+```text
+E2E_FRONTEND_BASE_URL
+E2E_BACKEND_API_URL
+E2E_ADMIN_EMAIL
+E2E_ADMIN_PASSWORD
+E2E_TEACHER_EMAIL
+E2E_TEACHER_PASSWORD
+E2E_STUDENT_EMAIL
+E2E_STUDENT_PASSWORD
+E2E_TEST_PASSWORD
+E2E_ALLOW_PRODUCTION
+```
+
+`E2E_TEST_PASSWORD` is used for newly created test users in seeded workflows.
+`E2E_ALLOW_PRODUCTION` should stay `false` unless you intentionally want seeded
+tests to create data against a production-like target.
+
+### E2E Workflow Modes
+
+The E2E workflow can run in two modes:
+
+- `smoke`: runs only `01-auth-smoke.spec.ts`.
+- `full`: runs `01`, `02`, `03`, and `04`, including seeded/mutating tests.
+
+Pushes to `main` run smoke E2E only when the required secrets exist. If secrets
+are missing, the workflow prints a clear skip message and exits successfully.
+
+To run the full seeded suite:
+
+1. Open the GitHub Actions tab.
+2. Select **E2E Tests**.
+3. Click **Run workflow**.
+4. Choose `full`.
+
+Full seeded tests run only when `E2E_ALLOW_PRODUCTION=true` or when the target
+URLs clearly look like staging/demo/preview/local. Seeded tests create school,
+user, question, practice, and assignment data, so use a disposable demo tenant.
+
+### Playwright Artifacts
+
+The E2E workflow uploads `frontend/playwright-report/` and
+`frontend/test-results/` as the `playwright-artifacts` artifact. Download it from
+the workflow run to inspect screenshots, videos, traces, and error context.
 
 ## API-Assisted Setup
 

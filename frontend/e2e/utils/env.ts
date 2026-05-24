@@ -53,8 +53,22 @@ export function looksLikeLocalUrl(url: string) {
   }
 }
 
+export function looksLikeStagingOrDemoUrl(url: string) {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return (
+      hostname.includes("staging") ||
+      hostname.includes("stage") ||
+      hostname.includes("demo") ||
+      hostname.includes("preview")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function looksLikeProductionUrl(url: string) {
-  if (looksLikeLocalUrl(url)) {
+  if (looksLikeLocalUrl(url) || looksLikeStagingOrDemoUrl(url)) {
     return false;
   }
 
