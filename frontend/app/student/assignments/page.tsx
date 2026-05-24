@@ -125,7 +125,7 @@ export default function StudentAssignmentsPage() {
       {filteredAssignments.length ? (
         <div className="space-y-4">
           {filteredAssignments.map((assignment) => (
-            <Card key={assignment.id}>
+            <Card key={assignment.id} data-testid="student-assignment-card">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">

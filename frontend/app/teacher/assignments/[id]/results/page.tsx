@@ -269,7 +269,10 @@ export default function AssignmentResultsPage({
         </section>
       ) : (
         <>
-          <section className="mt-6 space-y-3">
+          <section
+            className="mt-6 space-y-3"
+            data-testid="teacher-assignment-results-table"
+          >
             <h2 className="text-lg font-semibold text-ink">Student Results</h2>
             <DataTable<StudentResultRow>
               data={results.student_results}
@@ -280,7 +283,12 @@ export default function AssignmentResultsPage({
                   key: "student_name",
                   header: "Student name",
                   render: (row) => (
-                    <span className="font-semibold">{row.student_name}</span>
+                    <span
+                      className="font-semibold"
+                      data-testid="teacher-assignment-student-result-row"
+                    >
+                      {row.student_name}
+                    </span>
                   )
                 },
                 {

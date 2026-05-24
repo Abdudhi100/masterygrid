@@ -241,7 +241,10 @@ function AttemptContent({ assignmentId }: { assignmentId: string }) {
 
       <form className="space-y-4" onSubmit={handleSubmit}>
         {submission.questions.map((question, index) => (
-          <Card key={question.assignment_question}>
+          <Card
+            key={question.assignment_question}
+            data-testid="assignment-question-card"
+          >
             <p className="text-sm font-semibold text-brand-700">
               Question {index + 1} · {question.marks} mark
               {question.marks === 1 ? "" : "s"}
@@ -265,6 +268,7 @@ function AttemptContent({ assignmentId }: { assignmentId: string }) {
                 >
                   <input
                     type="radio"
+                    data-testid="assignment-option-radio"
                     name={`question-${question.assignment_question}`}
                     className="mt-1"
                     checked={answers[question.assignment_question] === option.id}
@@ -292,6 +296,7 @@ function AttemptContent({ assignmentId }: { assignmentId: string }) {
             </p>
             <Button
               type="submit"
+              data-testid="assignment-submit-button"
               isLoading={isSubmitting}
               disabled={answeredCount !== totalQuestions}
             >

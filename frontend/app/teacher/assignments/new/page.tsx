@@ -337,6 +337,7 @@ function AssignmentCreateForm() {
         <form className="space-y-4" onSubmit={handleGenerate}>
           <Input
             label="Title"
+            data-testid="assignment-title-input"
             value={title}
             required
             onChange={(event) => setTitle(event.target.value)}
@@ -345,6 +346,7 @@ function AssignmentCreateForm() {
           <div className="grid gap-4 md:grid-cols-3">
             <Select
               label="Class arm"
+              data-testid="assignment-class-arm-select"
               value={classArm}
               required
               disabled={Boolean(lessonLog)}
@@ -360,6 +362,7 @@ function AssignmentCreateForm() {
             />
             <Select
               label="Subject"
+              data-testid="assignment-subject-select"
               value={subject}
               required
               disabled={Boolean(lessonLog)}
@@ -374,6 +377,7 @@ function AssignmentCreateForm() {
             />
             <Select
               label="Topic"
+              data-testid="assignment-topic-select"
               value={topic}
               required
               disabled={Boolean(lessonLog)}
@@ -400,6 +404,7 @@ function AssignmentCreateForm() {
           <div className="grid gap-4 md:grid-cols-3">
             <Input
               label="Question count"
+              data-testid="assignment-question-count-input"
               type="number"
               min={1}
               value={questionCount}
@@ -440,21 +445,27 @@ function AssignmentCreateForm() {
             />
           </label>
 
-          <Button type="submit" isLoading={isGenerating}>
+          <Button
+            type="submit"
+            isLoading={isGenerating}
+            data-testid="assignment-generate-button"
+          >
             Generate Draft Assignment
           </Button>
         </form>
       </Card>
 
       {draftAssignment ? (
-        <Card className="mt-6">
+        <Card className="mt-6" data-testid="assignment-draft-preview">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold text-ink">
                   Draft preview
                 </h2>
-                <Badge tone="warning">{draftAssignment.status}</Badge>
+                <Badge tone="warning" data-testid="assignment-status-badge">
+                  {draftAssignment.status}
+                </Badge>
               </div>
               <p className="mt-2 text-sm text-muted">
                 {draftAssignment.assignment_questions.length} selected questions.
@@ -464,7 +475,11 @@ function AssignmentCreateForm() {
               <Link href="/teacher/assignments">
                 <Button variant="secondary">Save as Draft</Button>
               </Link>
-              <Button isLoading={isPublishing} onClick={handlePublish}>
+              <Button
+                isLoading={isPublishing}
+                onClick={handlePublish}
+                data-testid="assignment-publish-button"
+              >
                 Publish Assignment
               </Button>
             </div>

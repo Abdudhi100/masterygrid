@@ -126,7 +126,10 @@ export default function AssignmentDetailPage({
             <p>
               <span className="block font-semibold text-ink">Status</span>
               <span className="mt-1 inline-block">
-                <Badge tone={statusTone[assignment.status]}>
+                <Badge
+                  tone={statusTone[assignment.status]}
+                  data-testid="assignment-status-badge"
+                >
                   {assignment.status}
                 </Badge>
               </span>

@@ -146,7 +146,11 @@ export default function StudentAssignmentDetailPage({
                 <Button>Continue Assignment</Button>
               </Link>
             ) : (
-              <Button onClick={handleStart} isLoading={isStarting}>
+              <Button
+                onClick={handleStart}
+                isLoading={isStarting}
+                data-testid="assignment-start-button"
+              >
                 Start Assignment
               </Button>
             )}
