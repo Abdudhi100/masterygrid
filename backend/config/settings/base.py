@@ -10,11 +10,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 env = environ.Env(
     DEBUG=(bool, False),
     DATABASE_PORT=(int, 5432),
-    DATABASE_CONN_MAX_AGE=(int, 60),
     JWT_ACCESS_TOKEN_LIFETIME_MINUTES=(int, 15),
     JWT_REFRESH_TOKEN_LIFETIME_DAYS=(int, 7),
-    OPENAI_TIMEOUT_SECONDS=(int, 60),
-    AI_DAILY_REQUEST_LIMIT_PER_USER=(int, 20),
 )
 
 ENV_FILE = BASE_DIR / ".env"
@@ -28,7 +25,10 @@ SECRET_KEY = env(
 
 DEBUG = env.bool("DEBUG", default=False)
 
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+ALLOWED_HOSTS = env.list(
+    "ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1"],
+)
 
 DJANGO_APPS = [
     "django.contrib.admin",
@@ -40,9 +40,9 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
-    "corsheaders",
     "django_filters",
     "drf_spectacular",
 ]
@@ -54,18 +54,18 @@ LOCAL_APPS = [
     "apps.question_bank.apps.QuestionBankConfig",
     "apps.assignments.apps.AssignmentsConfig",
     "apps.submissions.apps.SubmissionsConfig",
-    "apps.practice.apps.PracticeConfig",
     "apps.analytics.apps.AnalyticsConfig",
     "apps.notifications.apps.NotificationsConfig",
     "apps.ai_generation.apps.AiGenerationConfig",
+    "apps.practice.apps.PracticeConfig",
     "apps.common.apps.CommonConfig",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -95,28 +95,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DATABASE_URL = env("DATABASE_URL", default="")
-if DATABASE_URL:
-    database_config = env.db_url_config(DATABASE_URL)
-    database_config["CONN_MAX_AGE"] = env.int("DATABASE_CONN_MAX_AGE", default=60)
-    if env.bool("DATABASE_SSL_REQUIRE", default=False):
-        database_config.setdefault("OPTIONS", {})["sslmode"] = "require"
-
-    DATABASES = {
-        "default": database_config
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env("DATABASE_NAME", default="masterygrid"),
+        "USER": env("DATABASE_USER", default="masterygrid_user"),
+        "PASSWORD": env("DATABASE_PASSWORD", default=""),
+        "HOST": env("DATABASE_HOST", default="localhost"),
+        "PORT": env.int("DATABASE_PORT", default=5432),
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": env("DATABASE_NAME", default="masterygrid"),
-            "USER": env("DATABASE_USER", default="masterygrid_user"),
-            "PASSWORD": env("DATABASE_PASSWORD", default=""),
-            "HOST": env("DATABASE_HOST", default="localhost"),
-            "PORT": env.int("DATABASE_PORT", default=5432),
-            "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE", default=60),
-        }
-    }
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -143,7 +131,7 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-MEDIA_URL = "/media/"
+MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 STORAGES = {
@@ -159,37 +147,15 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:3000"],
+    default=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
 )
+
 CORS_ALLOW_CREDENTIALS = True
-
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
-
-DEFAULT_FROM_EMAIL = env(
-    "DEFAULT_FROM_EMAIL",
-    default="MasteryGrid <noreply@masterygrid.local>",
-)
-
-OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
-OPENAI_MODEL = env("OPENAI_MODEL", default="gpt-4o-mini")
-OPENAI_TIMEOUT_SECONDS = env.int("OPENAI_TIMEOUT_SECONDS", default=60)
-AI_GENERATION_ENABLED = env.bool("AI_GENERATION_ENABLED", default=True)
-AI_STORE_RAW_PROVIDER_RESPONSE = env.bool(
-    "AI_STORE_RAW_PROVIDER_RESPONSE",
-    default=False,
-)
-AI_DAILY_REQUEST_LIMIT_PER_USER = env.int(
-    "AI_DAILY_REQUEST_LIMIT_PER_USER",
-    default=20,
-)
-AI_ALLOW_TEACHER_SUGGESTIONS = env.bool(
-    "AI_ALLOW_TEACHER_SUGGESTIONS",
-    default=True,
-)
-AI_ALLOW_TEACHER_APPLY_SUGGESTIONS = env.bool(
-    "AI_ALLOW_TEACHER_APPLY_SUGGESTIONS",
-    default=False,
-)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

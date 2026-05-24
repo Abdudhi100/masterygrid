@@ -12,6 +12,7 @@ from apps.question_bank.models import (
     Question,
     QuestionImportBatch,
     QuestionImportRowStatus,
+    QuestionMedia,
     QuestionOption,
     QuestionSource,
 )
@@ -286,6 +287,231 @@ class QuestionBankTests(TestCase):
         self.assertEqual(question.options.count(), 4)
         self.assertEqual(question.options.get(is_correct=True).label, "C")
         self.assertFalse(question.is_usable_for_assignment)
+
+    def test_valid_csv_preflight_returns_report_without_creating_records(self):
+        self.client.force_authenticate(self.school_admin)
+        question_count = Question.objects.count()
+        batch_count = QuestionImportBatch.objects.count()
+        media_count = QuestionMedia.objects.count()
+
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {"file": self.csv_upload([self.import_row()])},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["file_type"], "csv")
+        self.assertEqual(response.data["total_rows"], 1)
+        self.assertEqual(response.data["valid_rows"], 1)
+        self.assertEqual(response.data["invalid_rows"], 0)
+        self.assertEqual(response.data["warning_rows"], 0)
+        self.assertTrue(response.data["can_import"])
+        self.assertEqual(Question.objects.count(), question_count)
+        self.assertEqual(QuestionImportBatch.objects.count(), batch_count)
+        self.assertEqual(QuestionMedia.objects.count(), media_count)
+
+    def test_valid_zip_preflight_returns_report_without_saving_media(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {
+                "file": self.zip_upload(
+                    [
+                        self.import_row(
+                            question_text="Preflight ZIP diagram question?",
+                            has_diagram="true",
+                            diagram_file_name="math_2024_q1.png",
+                        )
+                    ],
+                    {"diagrams/math_2024_q1.png": b"image-bytes"},
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["file_type"], "zip")
+        self.assertEqual(response.data["valid_rows"], 1)
+        self.assertEqual(response.data["warning_rows"], 0)
+        self.assertTrue(response.data["can_import"])
+        self.assertFalse(
+            Question.objects.filter(
+                question_text="Preflight ZIP diagram question?"
+            ).exists()
+        )
+        self.assertEqual(QuestionMedia.objects.count(), 0)
+
+    def test_preflight_missing_correct_option_returns_invalid_row(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {"file": self.csv_upload([self.import_row(correct_option="")])},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["can_import"])
+        self.assertEqual(response.data["invalid_rows"], 1)
+        self.assertEqual(response.data["summary"]["missing_correct_option"], 1)
+        self.assertEqual(response.data["rows"][0]["status"], "invalid")
+
+    def test_preflight_missing_option_returns_invalid_row(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {"file": self.csv_upload([self.import_row(option_b="")])},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["invalid_rows"], 1)
+        self.assertEqual(response.data["summary"]["missing_options"], 1)
+
+    def test_preflight_invalid_difficulty_returns_invalid_row(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {"file": self.csv_upload([self.import_row(difficulty="impossible")])},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["invalid_rows"], 1)
+        self.assertEqual(response.data["summary"]["invalid_difficulty"], 1)
+
+    def test_preflight_missing_academic_data_appears_in_summary(self):
+        self.client.force_authenticate(self.school_admin)
+        rows = [
+            self.import_row(question_text="Missing subject?", subject="Physics"),
+            self.import_row(question_text="Missing class?", class_level="JAMB"),
+            self.import_row(question_text="Missing topic?", topic="Measurement"),
+        ]
+
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {"file": self.csv_upload(rows)},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Physics", response.data["summary"]["missing_subjects"])
+        self.assertIn("JAMB", response.data["summary"]["missing_class_levels"])
+        self.assertIn("Measurement", response.data["summary"]["missing_topics"])
+        self.assertEqual(response.data["invalid_rows"], 3)
+
+    def test_preflight_duplicate_inside_file_is_detected(self):
+        self.client.force_authenticate(self.school_admin)
+        row = self.import_row()
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {"file": self.csv_upload([row, row])},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["duplicate_rows"], 1)
+        self.assertEqual(response.data["summary"]["duplicate_questions"], 1)
+        self.assertEqual(response.data["rows"][1]["duplicate_type"], "in_file")
+        self.assertTrue(response.data["can_import"])
+
+    def test_preflight_existing_database_duplicate_is_detected(self):
+        self.client.force_authenticate(self.school_admin)
+        import_response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "Existing Import",
+                "file": self.csv_upload([self.import_row()]),
+            },
+            format="multipart",
+        )
+        self.assertEqual(import_response.status_code, 201)
+
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {"file": self.csv_upload([self.import_row()])},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["duplicate_rows"], 1)
+        self.assertEqual(response.data["summary"]["existing_database_duplicates"], 1)
+        self.assertEqual(response.data["rows"][0]["duplicate_type"], "database")
+
+    def test_preflight_zip_missing_image_returns_warning(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {
+                "file": self.zip_upload(
+                    [
+                        self.import_row(
+                            question_text="Preflight missing image?",
+                            has_diagram="true",
+                            diagram_file_name="missing.png",
+                        )
+                    ],
+                    {},
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["can_import"])
+        self.assertEqual(response.data["warning_rows"], 1)
+        self.assertEqual(response.data["summary"]["missing_diagrams"], 1)
+        self.assertIn("Diagram file not found", response.data["rows"][0]["warnings"][0]["message"])
+
+    def test_preflight_diagram_url_wins_over_zip_image_warning(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {
+                "file": self.zip_upload(
+                    [
+                        self.import_row(
+                            question_text="Preflight URL wins?",
+                            has_diagram="true",
+                            diagram_file_name="math_2024_q1.png",
+                            diagram_url="https://example.com/diagram.png",
+                        )
+                    ],
+                    {"diagrams/math_2024_q1.png": b"image-bytes"},
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["warning_rows"], 1)
+        self.assertIn("diagram_url was used", response.data["rows"][0]["warnings"][0]["message"])
+
+    def test_preflight_unsafe_zip_path_is_rejected(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {
+                "file": self.zip_upload(
+                    [self.import_row()],
+                    {"../evil.py": b"print('bad')"},
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Unsafe ZIP path", str(response.data))
+
+    def test_student_cannot_preflight_import(self):
+        self.client.force_authenticate(self.student)
+        response = self.client.post(
+            "/api/question-bank/imports/preflight/",
+            {"file": self.csv_upload([self.import_row()])},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     def test_student_cannot_import_questions(self):
         self.client.force_authenticate(self.student)

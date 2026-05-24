@@ -29,6 +29,10 @@ function unwrapList<T>(payload: T[] | ListResponse<T>) {
   return Array.isArray(payload) ? payload : payload.results;
 }
 
+function isListResponse<T>(payload: T[] | ListResponse<T>): payload is ListResponse<T> {
+  return !Array.isArray(payload);
+}
+
 async function listResource<T>(path: string) {
   const payload = await api.get<T[] | ListResponse<T>>(path);
   return unwrapList(payload);
@@ -48,6 +52,29 @@ function queryString(params?: QueryParams) {
 
   const query = searchParams.toString();
   return query ? `?${query}` : "";
+}
+
+async function listAllResource<T>(path: string, params?: QueryParams) {
+  const pageSize = 100;
+  const rows: T[] = [];
+  let page = 1;
+
+  while (true) {
+    const payload = await api.get<T[] | ListResponse<T>>(
+      `${path}${queryString({ ...params, page, page_size: pageSize })}`
+    );
+
+    if (!isListResponse(payload)) {
+      return page === 1 ? payload : [...rows, ...payload];
+    }
+
+    rows.push(...payload.results);
+    if (!payload.next || payload.results.length === 0 || rows.length >= payload.count) {
+      return rows;
+    }
+
+    page += 1;
+  }
 }
 
 export const getAcademicSessions = (params?: QueryParams) =>
@@ -70,6 +97,8 @@ export const updateTerm = (id: number, payload: Partial<Term>) =>
 
 export const getClassLevels = (params?: QueryParams) =>
   listResource<ClassLevel>(`/academics/class-levels/${queryString(params)}`);
+export const getAllClassLevels = (params?: QueryParams) =>
+  listAllResource<ClassLevel>("/academics/class-levels/", params);
 export const createClassLevel = (payload: Partial<ClassLevel>) =>
   api.post<ClassLevel>("/academics/class-levels/", payload);
 export const updateClassLevel = (id: number, payload: Partial<ClassLevel>) =>
@@ -84,6 +113,8 @@ export const updateClassArm = (id: number, payload: Partial<ClassArm>) =>
 
 export const getSubjects = (params?: QueryParams) =>
   listResource<Subject>(`/academics/subjects/${queryString(params)}`);
+export const getAllSubjects = (params?: QueryParams) =>
+  listAllResource<Subject>("/academics/subjects/", params);
 export const createSubject = (payload: Partial<Subject>) =>
   api.post<Subject>("/academics/subjects/", payload);
 export const updateSubject = (id: number, payload: Partial<Subject>) =>
@@ -91,6 +122,8 @@ export const updateSubject = (id: number, payload: Partial<Subject>) =>
 
 export const getTopics = (params?: QueryParams) =>
   listResource<Topic>(`/academics/topics/${queryString(params)}`);
+export const getAllTopics = (params?: QueryParams) =>
+  listAllResource<Topic>("/academics/topics/", params);
 export const createTopic = (payload: Partial<Topic>) =>
   api.post<Topic>("/academics/topics/", payload);
 export const updateTopic = (id: number, payload: Partial<Topic>) =>

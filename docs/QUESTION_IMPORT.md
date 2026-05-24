@@ -25,6 +25,82 @@ Fields:
 
 The MVP processes CSV and ZIP imports immediately.
 
+## Preflight Validation
+
+Before creating draft questions, admins can validate a CSV or ZIP file without
+creating any question, option, media, import batch, or import row records:
+
+```text
+POST /api/question-bank/imports/preflight/
+```
+
+Request type:
+
+```text
+multipart/form-data
+```
+
+Fields:
+
+- `file` - CSV file or ZIP archive
+- `source` - optional existing `QuestionSource` ID
+- `school` - optional, platform admins only; blank means global validation
+
+Preflight returns a data-quality report with:
+
+- total rows
+- valid rows
+- invalid rows
+- warning rows
+- duplicate rows
+- missing subjects, class levels, and topics
+- missing diagrams
+- row-level errors and warnings
+
+Example response shape:
+
+```json
+{
+  "file_type": "zip",
+  "total_rows": 20,
+  "valid_rows": 17,
+  "invalid_rows": 1,
+  "warning_rows": 1,
+  "duplicate_rows": 1,
+  "can_import": false,
+  "summary": {
+    "missing_required_fields": 1,
+    "missing_correct_option": 1,
+    "missing_options": 0,
+    "invalid_difficulty": 0,
+    "invalid_correct_option": 0,
+    "invalid_source_type": 0,
+    "duplicate_option_texts": 0,
+    "missing_subjects": [],
+    "missing_class_levels": [],
+    "missing_topics": [],
+    "missing_diagrams": 1,
+    "duplicate_questions": 1,
+    "existing_database_duplicates": 0
+  },
+  "rows": []
+}
+```
+
+`valid_rows` includes rows that are valid with warnings. `can_import` is true
+only when `invalid_rows` is zero. Duplicate rows follow the normal import
+behavior: they are counted separately as duplicates rather than invalid rows.
+Warnings do not block import.
+
+Recommended workflow:
+
+1. Upload the file to the preflight endpoint.
+2. Review row errors and warnings.
+3. Fix the CSV or ZIP if needed.
+4. Upload the corrected file to the import endpoint.
+5. Review imported draft questions.
+6. Approve or reject questions through the normal review workflow.
+
 ## Required CSV Columns
 
 ```csv

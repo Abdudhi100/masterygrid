@@ -5,6 +5,7 @@ import type {
   QuestionFilters,
   QuestionImportBatch,
   QuestionImportFilters,
+  QuestionImportPreflightResponse,
   QuestionImportRow,
   QuestionMedia,
   QuestionMediaPayload,
@@ -133,3 +134,9 @@ export const getQuestionImportRows = async (id: number | string) => {
 
 export const createQuestionImport = (formData: FormData) =>
   api.post<QuestionImportBatch>("/question-bank/imports/", formData);
+
+export const preflightQuestionImport = (formData: FormData) =>
+  api.post<QuestionImportPreflightResponse>(
+    "/question-bank/imports/preflight/",
+    formData
+  );

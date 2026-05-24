@@ -196,3 +196,75 @@ export type QuestionImportFilters = QueryParams & {
   status?: QuestionImportStatus | "";
   search?: string;
 };
+
+export type QuestionImportPreflightIssue = {
+  field: string;
+  message: string;
+};
+
+export type QuestionImportPreflightError = QuestionImportPreflightIssue;
+
+export type QuestionImportPreflightWarning = QuestionImportPreflightIssue;
+
+export type QuestionImportPreflightRowStatus =
+  | "valid"
+  | "valid_with_warnings"
+  | "invalid"
+  | "duplicate";
+
+export type QuestionImportPreflightDuplicateType =
+  | "in_file"
+  | "database"
+  | "";
+
+export type QuestionImportPreflightResolved = {
+  subject_id: number | null;
+  subject_name: string;
+  class_level_id: number | null;
+  class_level_name: string;
+  topic_id: number | null;
+  topic_title: string;
+};
+
+export type QuestionImportPreflightRow = {
+  row_number: number;
+  status: QuestionImportPreflightRowStatus;
+  errors: QuestionImportPreflightError[];
+  warnings: QuestionImportPreflightWarning[];
+  duplicate_type: QuestionImportPreflightDuplicateType;
+  content_hash: string;
+  question_preview: string;
+  subject: string;
+  class_level: string;
+  topic: string;
+  diagram_file_name: string;
+  resolved: QuestionImportPreflightResolved;
+};
+
+export type QuestionImportPreflightSummary = {
+  missing_required_fields: number;
+  missing_correct_option: number;
+  missing_options: number;
+  invalid_difficulty: number;
+  invalid_correct_option: number;
+  invalid_source_type: number;
+  duplicate_option_texts: number;
+  missing_subjects: string[];
+  missing_class_levels: string[];
+  missing_topics: string[];
+  missing_diagrams: number;
+  duplicate_questions: number;
+  existing_database_duplicates: number;
+};
+
+export type QuestionImportPreflightResponse = {
+  file_type: QuestionImportFileType;
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  warning_rows: number;
+  duplicate_rows: number;
+  can_import: boolean;
+  summary: QuestionImportPreflightSummary;
+  rows: QuestionImportPreflightRow[];
+};

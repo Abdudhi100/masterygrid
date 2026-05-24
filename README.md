@@ -132,6 +132,11 @@ Student practice analytics and recommendations are computed from submitted
 practice sessions and approved active question-bank availability only. See
 [docs/PRACTICE_ANALYTICS.md](docs/PRACTICE_ANALYTICS.md).
 
+## E2E Testing
+
+Playwright browser tests cover critical flows across local or deployed demo
+environments. See [docs/E2E_TESTING.md](docs/E2E_TESTING.md).
+
 ## Deployment
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Render/Railway backend setup,

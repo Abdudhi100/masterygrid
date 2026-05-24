@@ -25,12 +25,15 @@ staticfiles/
 !.env.example
 !backend/.env.production.example
 !frontend/.env.production.example
+!frontend/.env.e2e.example
 
 # Test and coverage
 .pytest_cache/
 .coverage
 coverage.xml
 htmlcov/
+frontend/test-results/
+frontend/playwright-report/
 
 # Tooling
 .ruff_cache/

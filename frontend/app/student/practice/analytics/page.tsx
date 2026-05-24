@@ -151,7 +151,7 @@ export default function StudentPracticeAnalyticsPage() {
   const { summary } = dashboard;
 
   return (
-    <>
+    <div data-testid="practice-analytics-dashboard">
       <PageHeader
         title="Practice Analytics"
         description="Review your practice performance and choose what to work on next."
@@ -406,7 +406,7 @@ export default function StudentPracticeAnalyticsPage() {
         </Card>
       </section>
 
-      <section className="mt-6">
+      <section className="mt-6" data-testid="practice-recent-sessions">
         <Card>
           <h2 className="text-base font-semibold text-ink">Recent Practice</h2>
           <div className="mt-4">
@@ -460,6 +460,6 @@ export default function StudentPracticeAnalyticsPage() {
           </div>
         </Card>
       </section>
-    </>
+    </div>
   );
 }

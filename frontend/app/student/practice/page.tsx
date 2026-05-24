@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Select } from "@/components/ui/Select";
-import { getClassLevels, getSubjects, getTopics } from "@/lib/academics";
+import { getAllClassLevels, getAllSubjects, getAllTopics } from "@/lib/academics";
 import { ApiError } from "@/lib/api";
 import {
   getPracticeRecommendations,
@@ -131,9 +131,9 @@ export default function StudentPracticePage() {
         sessionsData,
         recommendationsData
       ] = await Promise.all([
-        getSubjects(),
-        getTopics(),
-        getClassLevels(),
+        getAllSubjects({ is_active: true }),
+        getAllTopics({ is_active: true }),
+        getAllClassLevels({ is_active: true }),
         getPracticeSessions(),
         getPracticeRecommendations()
       ]);
@@ -294,6 +294,7 @@ export default function StudentPracticePage() {
             <form className="mt-5 space-y-4" onSubmit={handleStartPractice}>
               <Select
                 label="Subject"
+                data-testid="practice-subject-select"
                 value={form.subject}
                 options={[
                   { value: "", label: "Select subject" },
@@ -306,6 +307,7 @@ export default function StudentPracticePage() {
               />
               <Select
                 label="Class level"
+                data-testid="practice-class-level-select"
                 value={form.class_level}
                 options={[
                   { value: "", label: "Any class level" },
@@ -318,6 +320,7 @@ export default function StudentPracticePage() {
               />
               <Select
                 label="Topic"
+                data-testid="practice-topic-select"
                 value={form.topic}
                 options={[
                   { value: "", label: "Any matching topic" },
@@ -330,6 +333,7 @@ export default function StudentPracticePage() {
               />
               <Select
                 label="Difficulty"
+                data-testid="practice-difficulty-select"
                 value={form.difficulty}
                 options={difficultyOptions}
                 onChange={(event) =>
@@ -338,6 +342,7 @@ export default function StudentPracticePage() {
               />
               <Input
                 label="Question count"
+                data-testid="practice-question-count-input"
                 type="number"
                 min={1}
                 max={100}
@@ -346,7 +351,11 @@ export default function StudentPracticePage() {
                   updateForm("question_count", event.target.value)
                 }
               />
-              <Button type="submit" isLoading={isStarting}>
+              <Button
+                type="submit"
+                isLoading={isStarting}
+                data-testid="practice-start-button"
+              >
                 Start Practice
               </Button>
             </form>

@@ -679,6 +679,64 @@ class QuestionImportCreateSerializer(serializers.Serializer):
         return batch
 
 
+class QuestionImportPreflightUploadSerializer(serializers.Serializer):
+    source = serializers.PrimaryKeyRelatedField(
+        queryset=QuestionSource.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    school = serializers.PrimaryKeyRelatedField(
+        queryset=School.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    file = serializers.FileField(write_only=True)
+
+    def validate_file(self, value):
+        filename = getattr(value, "name", "")
+        try:
+            detect_import_file_type(value)
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+
+        if not filename.lower().endswith((".csv", ".zip")):
+            raise serializers.ValidationError("Only CSV and ZIP imports are supported.")
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError("Authentication is required.")
+
+        target_school = attrs.get("school")
+        if is_platform_admin(user):
+            return attrs
+
+        if user.role == UserRole.SCHOOL_ADMIN:
+            if not user.school_id:
+                raise serializers.ValidationError(
+                    {"school": "School admins must belong to a school."}
+                )
+            if target_school and target_school.id != user.school_id:
+                raise serializers.ValidationError(
+                    {"school": "School admins can only import for their own school."}
+                )
+            attrs["school"] = user.school
+            return attrs
+
+        allow_teacher_imports = self.context.get("allow_teacher_imports", False)
+        if allow_teacher_imports and user.role == UserRole.TEACHER and user.school_id:
+            if target_school and target_school.id != user.school_id:
+                raise serializers.ValidationError(
+                    {"school": "Teachers can only import for their own school."}
+                )
+            attrs["school"] = user.school
+            return attrs
+
+        raise serializers.ValidationError("You cannot preflight question imports.")
+
+
 class ApprovedQuestionSearchSerializer(serializers.Serializer):
     subject = serializers.IntegerField(required=False)
     topic = serializers.IntegerField(required=False)

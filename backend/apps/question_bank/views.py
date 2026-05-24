@@ -1,9 +1,10 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
@@ -28,6 +29,7 @@ from apps.question_bank.serializers import (
     ApprovedQuestionSearchSerializer,
     QuestionImportBatchSerializer,
     QuestionImportCreateSerializer,
+    QuestionImportPreflightUploadSerializer,
     QuestionImportRowSerializer,
     QuestionCreateUpdateSerializer,
     QuestionMediaSerializer,
@@ -37,9 +39,18 @@ from apps.question_bank.serializers import (
 from apps.question_bank.services import (
     approve_question,
     archive_question,
+    build_question_import_preflight_report,
     process_question_import_batch,
     reject_question,
 )
+
+
+def raise_drf_validation_error(exc):
+    if hasattr(exc, "message_dict"):
+        raise ValidationError(exc.message_dict)
+    if hasattr(exc, "messages"):
+        raise ValidationError(exc.messages)
+    raise ValidationError(str(exc))
 
 
 class QuestionSourceViewSet(viewsets.ModelViewSet):
@@ -241,13 +252,15 @@ class QuestionImportBatchViewSet(viewsets.ModelViewSet):
     allow_teacher_imports = getattr(settings, "QUESTION_IMPORT_ALLOW_TEACHERS", False)
 
     def get_permissions(self):
-        if self.action == "create":
+        if self.action in {"create", "preflight"}:
             return [CanImportQuestions()]
         return [CanViewQuestionImports()]
 
     def get_serializer_class(self):
         if self.action == "create":
             return QuestionImportCreateSerializer
+        if self.action == "preflight":
+            return QuestionImportPreflightUploadSerializer
         return QuestionImportBatchSerializer
 
     def get_serializer_context(self):
@@ -286,6 +299,21 @@ class QuestionImportBatchViewSet(viewsets.ModelViewSet):
             context=self.get_serializer_context(),
         )
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="preflight")
+    def preflight(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            report = build_question_import_preflight_report(
+                uploaded_file=serializer.validated_data["file"],
+                user=request.user,
+                school=serializer.validated_data.get("school"),
+                source=serializer.validated_data.get("source"),
+            )
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+        return Response(report)
 
     @action(detail=True, methods=["get"])
     def rows(self, request, pk=None):

@@ -221,7 +221,10 @@ function PracticeAttemptContent({ sessionId }: { sessionId: string }) {
 
       <form className="space-y-4" onSubmit={handleSubmit}>
         {questions.map((question, index) => (
-          <Card key={question.session_question}>
+          <Card
+            key={question.session_question}
+            data-testid="practice-question-card"
+          >
             <p className="text-sm font-semibold text-brand-700">
               Question {index + 1} - {question.marks} mark
               {question.marks === 1 ? "" : "s"}
@@ -245,6 +248,7 @@ function PracticeAttemptContent({ sessionId }: { sessionId: string }) {
                 >
                   <input
                     type="radio"
+                    data-testid="practice-option-radio"
                     name={`practice-question-${question.session_question}`}
                     className="mt-1"
                     checked={answers[question.session_question] === option.id}
@@ -272,6 +276,7 @@ function PracticeAttemptContent({ sessionId }: { sessionId: string }) {
             </p>
             <Button
               type="submit"
+              data-testid="practice-submit-button"
               isLoading={isSubmitting}
               disabled={answeredCount !== totalQuestions}
             >

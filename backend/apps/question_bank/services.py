@@ -56,6 +56,18 @@ CSV_IMPORT_OPTIONAL_COLUMNS = {
     "diagram_description",
     "needs_manual_review",
 }
+PREFLIGHT_REQUIRED_FIELDS = {
+    "subject",
+    "class_level",
+    "topic",
+    "difficulty",
+    "question_text",
+    "option_a",
+    "option_b",
+    "option_c",
+    "option_d",
+    "correct_option",
+}
 BOOLEAN_TRUE_VALUES = {"1", "true", "yes", "y"}
 BOOLEAN_FALSE_VALUES = {"0", "false", "no", "n", ""}
 ALLOWED_ZIP_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
@@ -422,6 +434,24 @@ def validation_error_message(exc):
     return str(exc)
 
 
+def append_issue(issues, *, field, message, code):
+    issues.append({"field": field, "message": message, "code": code})
+
+
+def public_issues(issues):
+    return [
+        {
+            "field": issue["field"],
+            "message": issue["message"],
+        }
+        for issue in issues
+    ]
+
+
+def issue_codes(issues):
+    return {issue["code"] for issue in issues}
+
+
 def get_required_row_value(row_data, field):
     value = normalize_question_text(row_data.get(field, ""))
     if not value:
@@ -570,6 +600,485 @@ def get_or_create_import_source(*, row_data, batch):
         source.save(update_fields=changed_fields)
 
     return source
+
+
+def analyze_import_row(
+    *,
+    row_number,
+    row_data,
+    school,
+    source=None,
+    file_type=QuestionImportFileType.CSV,
+    zip_image_map=None,
+):
+    errors = []
+    warnings = []
+    resolved = {
+        "subject_id": None,
+        "subject_name": "",
+        "class_level_id": None,
+        "class_level_name": "",
+        "topic_id": None,
+        "topic_title": "",
+    }
+    summary_values = {
+        "missing_subject": "",
+        "missing_class_level": "",
+        "missing_topic": "",
+        "missing_diagram": "",
+        "existing_database_duplicate": False,
+    }
+
+    source_required_fields = set()
+    if source is None:
+        source_required_fields = {"source_name", "source_type"}
+
+    for field in sorted(PREFLIGHT_REQUIRED_FIELDS | source_required_fields):
+        if not normalize_question_text(row_data.get(field, "")):
+            code = "missing_required_field"
+            if field == "correct_option":
+                code = "missing_correct_option"
+            elif field.startswith("option_"):
+                code = "missing_option"
+            append_issue(
+                errors,
+                field=field,
+                message=f"{field} is required.",
+                code=code,
+            )
+
+    subject_name = get_optional_row_value(row_data, "subject")
+    class_level_name = get_optional_row_value(row_data, "class_level")
+    topic_title = get_optional_row_value(row_data, "topic")
+    difficulty = get_optional_row_value(row_data, "difficulty").lower()
+    question_text = get_optional_row_value(row_data, "question_text")
+    correct_option = get_optional_row_value(row_data, "correct_option").upper()
+    diagram_file_name = get_optional_row_value(row_data, "diagram_file_name")
+
+    if difficulty and difficulty not in QuestionDifficulty.values:
+        append_issue(
+            errors,
+            field="difficulty",
+            message="Difficulty must be easy, medium, or hard.",
+            code="invalid_difficulty",
+        )
+
+    if correct_option and correct_option not in QuestionOptionLabel.values:
+        append_issue(
+            errors,
+            field="correct_option",
+            message="Correct option must be A, B, C, or D.",
+            code="invalid_correct_option",
+        )
+
+    try:
+        parse_optional_year(row_data.get("year", ""))
+    except ValidationError as exc:
+        append_issue(
+            errors,
+            field="year",
+            message=validation_error_message(exc),
+            code="invalid_year",
+        )
+
+    source_type = get_optional_row_value(row_data, "source_type").lower()
+    if source is None and source_type and source_type not in QuestionSourceType.values:
+        append_issue(
+            errors,
+            field="source_type",
+            message="Source type must be one of the configured source types.",
+            code="invalid_source_type",
+        )
+
+    has_diagram = False
+    needs_manual_review = False
+    try:
+        has_diagram = parse_optional_bool(
+            row_data.get("has_diagram", ""),
+            field="has_diagram",
+        )
+    except ValidationError as exc:
+        append_issue(
+            errors,
+            field="has_diagram",
+            message=validation_error_message(exc),
+            code="invalid_boolean",
+        )
+
+    try:
+        needs_manual_review = parse_optional_bool(
+            row_data.get("needs_manual_review", ""),
+            field="needs_manual_review",
+        )
+    except ValidationError as exc:
+        append_issue(
+            errors,
+            field="needs_manual_review",
+            message=validation_error_message(exc),
+            code="invalid_boolean",
+        )
+
+    diagram_url = ""
+    try:
+        diagram_url = validate_external_diagram_url(row_data.get("diagram_url", ""))
+    except ValidationError as exc:
+        append_issue(
+            errors,
+            field="diagram_url",
+            message=validation_error_message(exc),
+            code="invalid_diagram_url",
+        )
+
+    normalized_diagram_file_name = ""
+    if diagram_file_name:
+        try:
+            normalized_diagram_file_name = normalize_diagram_file_name(
+                diagram_file_name
+            )
+        except ValidationError as exc:
+            append_issue(
+                errors,
+                field="diagram_file_name",
+                message=validation_error_message(exc),
+                code="invalid_diagram_file_name",
+            )
+
+    subject = None
+    if subject_name:
+        try:
+            subject = find_visible_subject(name=subject_name, school=school)
+            resolved["subject_id"] = subject.id
+            resolved["subject_name"] = subject.name
+        except ValidationError as exc:
+            summary_values["missing_subject"] = subject_name
+            append_issue(
+                errors,
+                field="subject",
+                message=validation_error_message(exc),
+                code="missing_subject",
+            )
+
+    class_level = None
+    if class_level_name:
+        try:
+            class_level = find_visible_class_level(name=class_level_name, school=school)
+            resolved["class_level_id"] = class_level.id
+            resolved["class_level_name"] = class_level.name
+        except ValidationError as exc:
+            summary_values["missing_class_level"] = class_level_name
+            append_issue(
+                errors,
+                field="class_level",
+                message=validation_error_message(exc),
+                code="missing_class_level",
+            )
+
+    topic = None
+    if topic_title and subject and class_level:
+        try:
+            topic = find_visible_topic(
+                title=topic_title,
+                subject=subject,
+                class_level=class_level,
+                school=school,
+            )
+            resolved["topic_id"] = topic.id
+            resolved["topic_title"] = topic.title
+        except ValidationError as exc:
+            summary_values["missing_topic"] = topic_title
+            append_issue(
+                errors,
+                field="topic",
+                message=validation_error_message(exc),
+                code="missing_topic",
+            )
+
+    options = []
+    missing_option_exists = False
+    for label in ["A", "B", "C", "D"]:
+        field = f"option_{label.lower()}"
+        option_text = get_optional_row_value(row_data, field)
+        if not option_text:
+            missing_option_exists = True
+        options.append(
+            {
+                "label": label,
+                "text": option_text,
+                "is_correct": label == correct_option,
+            }
+        )
+
+    option_texts = [
+        option["text"].strip().casefold()
+        for option in options
+        if option["text"].strip()
+    ]
+    if len(option_texts) != len(set(option_texts)):
+        append_issue(
+            errors,
+            field="options",
+            message="Duplicate option text is not allowed for the same question.",
+            code="duplicate_option_texts",
+        )
+
+    if (
+        not missing_option_exists
+        and correct_option in QuestionOptionLabel.values
+        and not issue_codes(errors).intersection({"duplicate_option_texts"})
+    ):
+        try:
+            validate_question_options(options)
+        except ValidationError as exc:
+            append_issue(
+                errors,
+                field="options",
+                message=validation_error_message(exc),
+                code="invalid_options",
+            )
+
+    content_hash = ""
+    if (
+        question_text
+        and subject
+        and topic
+        and class_level
+        and not missing_option_exists
+        and correct_option in QuestionOptionLabel.values
+        and "duplicate_option_texts" not in issue_codes(errors)
+    ):
+        content_hash = build_question_content_hash(
+            question_text=question_text,
+            subject=subject,
+            topic=topic,
+            class_level=class_level,
+            options=options,
+        )
+        if Question.objects.filter(content_hash=content_hash).exists():
+            summary_values["existing_database_duplicate"] = True
+
+    diagram_requested = has_diagram or bool(diagram_url) or bool(diagram_file_name)
+    if diagram_url and diagram_file_name and file_type == QuestionImportFileType.ZIP:
+        append_issue(
+            warnings,
+            field="diagram_file_name",
+            message=(
+                "diagram_url was used and ZIP image will be ignored: "
+                f"{diagram_file_name}"
+            ),
+            code="diagram_url_wins",
+        )
+    elif normalized_diagram_file_name and file_type == QuestionImportFileType.ZIP:
+        try:
+            image_record = get_image_from_zip_map(
+                zip_image_map or {},
+                normalized_diagram_file_name,
+            )
+            if image_record is None:
+                summary_values["missing_diagram"] = diagram_file_name
+                append_issue(
+                    warnings,
+                    field="diagram_file_name",
+                    message=f"Diagram file not found in ZIP: {diagram_file_name}",
+                    code="missing_diagram",
+                )
+        except ValidationError as exc:
+            append_issue(
+                errors,
+                field="diagram_file_name",
+                message=validation_error_message(exc),
+                code="invalid_diagram_file_name",
+            )
+    elif normalized_diagram_file_name and file_type == QuestionImportFileType.CSV:
+        append_issue(
+            warnings,
+            field="diagram_file_name",
+            message=(
+                "diagram_file_name is a manual-review hint in CSV imports; "
+                "use ZIP import to attach local images."
+            ),
+            code="manual_diagram_review",
+        )
+    elif has_diagram and not diagram_url:
+        append_issue(
+            warnings,
+            field="has_diagram",
+            message=(
+                "Question is marked as having a diagram, but no diagram_url or "
+                "diagram_file_name was provided."
+            ),
+            code="missing_diagram_reference",
+        )
+
+    if needs_manual_review and diagram_requested:
+        append_issue(
+            warnings,
+            field="needs_manual_review",
+            message="This row is marked for manual review.",
+            code="needs_manual_review",
+        )
+
+    duplicate_type = ""
+    if summary_values["existing_database_duplicate"]:
+        duplicate_type = "database"
+
+    return {
+        "row_number": row_number,
+        "errors": errors,
+        "warnings": warnings,
+        "duplicate_type": duplicate_type,
+        "content_hash": content_hash,
+        "question_preview": question_text[:120],
+        "subject": subject_name,
+        "class_level": class_level_name,
+        "topic": topic_title,
+        "diagram_file_name": diagram_file_name,
+        "resolved": resolved,
+        "summary_values": summary_values,
+    }
+
+
+def build_question_import_preflight_report(
+    *,
+    uploaded_file,
+    user,
+    school=None,
+    source=None,
+):
+    file_type = detect_import_file_type(uploaded_file)
+    zip_image_map = None
+    if file_type == QuestionImportFileType.ZIP:
+        rows, zip_image_map = read_csv_from_zip(uploaded_file)
+    else:
+        rows = read_csv_from_upload(uploaded_file)
+
+    summary = {
+        "missing_required_fields": 0,
+        "missing_correct_option": 0,
+        "missing_options": 0,
+        "invalid_difficulty": 0,
+        "invalid_correct_option": 0,
+        "invalid_source_type": 0,
+        "duplicate_option_texts": 0,
+        "missing_subjects": set(),
+        "missing_class_levels": set(),
+        "missing_topics": set(),
+        "missing_diagrams": 0,
+        "duplicate_questions": 0,
+        "existing_database_duplicates": 0,
+    }
+    analyzed_rows = []
+    seen_hashes = {}
+
+    for row_number, row_data in rows:
+        analysis = analyze_import_row(
+            row_number=row_number,
+            row_data=row_data,
+            school=school,
+            source=source,
+            file_type=file_type,
+            zip_image_map=zip_image_map,
+        )
+
+        content_hash = analysis["content_hash"]
+        if content_hash:
+            if content_hash in seen_hashes and not analysis["duplicate_type"]:
+                analysis["duplicate_type"] = "in_file"
+            else:
+                seen_hashes[content_hash] = row_number
+
+        errors = analysis["errors"]
+        warnings = analysis["warnings"]
+        error_codes = issue_codes(errors)
+        warning_codes = issue_codes(warnings)
+
+        if error_codes.intersection(
+            {"missing_required_field", "missing_correct_option", "missing_option"}
+        ):
+            summary["missing_required_fields"] += 1
+        if "missing_correct_option" in error_codes:
+            summary["missing_correct_option"] += 1
+        if "missing_option" in error_codes:
+            summary["missing_options"] += 1
+        if "invalid_difficulty" in error_codes:
+            summary["invalid_difficulty"] += 1
+        if "invalid_correct_option" in error_codes:
+            summary["invalid_correct_option"] += 1
+        if "invalid_source_type" in error_codes:
+            summary["invalid_source_type"] += 1
+        if "duplicate_option_texts" in error_codes:
+            summary["duplicate_option_texts"] += 1
+        if analysis["summary_values"]["missing_subject"]:
+            summary["missing_subjects"].add(
+                analysis["summary_values"]["missing_subject"]
+            )
+        if analysis["summary_values"]["missing_class_level"]:
+            summary["missing_class_levels"].add(
+                analysis["summary_values"]["missing_class_level"]
+            )
+        if analysis["summary_values"]["missing_topic"]:
+            summary["missing_topics"].add(
+                analysis["summary_values"]["missing_topic"]
+            )
+        if "missing_diagram" in warning_codes:
+            summary["missing_diagrams"] += 1
+        if analysis["duplicate_type"]:
+            summary["duplicate_questions"] += 1
+        if analysis["duplicate_type"] == "database":
+            summary["existing_database_duplicates"] += 1
+
+        if errors:
+            status = "invalid"
+        elif analysis["duplicate_type"]:
+            status = "duplicate"
+        elif warnings:
+            status = "valid_with_warnings"
+        else:
+            status = "valid"
+
+        analyzed_rows.append(
+            {
+                "row_number": analysis["row_number"],
+                "status": status,
+                "errors": public_issues(errors),
+                "warnings": public_issues(warnings),
+                "duplicate_type": analysis["duplicate_type"],
+                "content_hash": analysis["content_hash"],
+                "question_preview": analysis["question_preview"],
+                "subject": analysis["subject"],
+                "class_level": analysis["class_level"],
+                "topic": analysis["topic"],
+                "diagram_file_name": analysis["diagram_file_name"],
+                "resolved": analysis["resolved"],
+            }
+        )
+
+    valid_rows = sum(
+        1
+        for row in analyzed_rows
+        if row["status"] in {"valid", "valid_with_warnings"}
+    )
+    warning_rows = sum(1 for row in analyzed_rows if row["warnings"])
+    invalid_rows = sum(1 for row in analyzed_rows if row["status"] == "invalid")
+    duplicate_rows = sum(1 for row in analyzed_rows if row["status"] == "duplicate")
+
+    return {
+        "file_type": file_type,
+        "total_rows": len(analyzed_rows),
+        "valid_rows": valid_rows,
+        "invalid_rows": invalid_rows,
+        "warning_rows": warning_rows,
+        "duplicate_rows": duplicate_rows,
+        # Duplicates follow the current import behavior: they are counted as
+        # duplicate rows, not invalid rows. Warnings also do not block import.
+        "can_import": invalid_rows == 0,
+        "summary": {
+            **summary,
+            "missing_subjects": sorted(summary["missing_subjects"]),
+            "missing_class_levels": sorted(summary["missing_class_levels"]),
+            "missing_topics": sorted(summary["missing_topics"]),
+        },
+        "rows": analyzed_rows,
+    }
 
 
 def validate_import_row(row_data, user, batch):

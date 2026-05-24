@@ -102,7 +102,10 @@ function PracticeResultContent({ sessionId }: { sessionId: string }) {
         }
       />
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        data-testid="practice-result-summary"
+      >
         <Card>
           <p className="text-sm font-medium text-muted">Score</p>
           <p className="mt-2 text-3xl font-semibold text-ink">
@@ -132,7 +135,10 @@ function PracticeResultContent({ sessionId }: { sessionId: string }) {
       <section className="mt-6 space-y-4">
         <h2 className="text-lg font-semibold text-ink">Correction Review</h2>
         {result.answers.map((answer, index) => (
-          <Card key={answer.session_question}>
+          <Card
+            key={answer.session_question}
+            data-testid="practice-correction-card"
+          >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-semibold text-brand-700">
                 Question {index + 1}
