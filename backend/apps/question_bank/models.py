@@ -35,6 +35,7 @@ class QuestionMediaType(models.TextChoices):
 
 class QuestionImportFileType(models.TextChoices):
     CSV = "csv", "CSV"
+    ZIP = "zip", "ZIP"
     XLSX = "xlsx", "Excel"
     JSON = "json", "JSON"
 
@@ -392,6 +393,7 @@ class QuestionImportBatch(TimeStampedModel):
     successful_rows = models.PositiveIntegerField(default=0)
     failed_rows = models.PositiveIntegerField(default=0)
     duplicate_rows = models.PositiveIntegerField(default=0)
+    warning_rows = models.PositiveIntegerField(default=0)
     error_summary = models.TextField(blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)
 
@@ -420,6 +422,7 @@ class QuestionImportRow(TimeStampedModel):
         default=QuestionImportRowStatus.PENDING,
     )
     error_message = models.TextField(blank=True)
+    warning_message = models.TextField(blank=True)
     question = models.ForeignKey(
         Question,
         related_name="import_rows",

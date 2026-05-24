@@ -13,10 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Select } from "@/components/ui/Select";
 import { ApiError } from "@/lib/api";
-import {
-  createQuestionImport,
-  getQuestionSources
-} from "@/lib/questionBank";
+import { createQuestionImport, getQuestionSources } from "@/lib/questionBank";
 import type { QuestionSource } from "@/types/questionBank";
 
 const requiredColumns = [
@@ -44,6 +41,11 @@ const optionalDiagramColumns = [
   "diagram_description",
   "needs_manual_review"
 ];
+
+function isSupportedImportFile(file: File) {
+  const name = file.name.toLowerCase();
+  return name.endsWith(".csv") || name.endsWith(".zip");
+}
 
 export default function NewQuestionImportPage() {
   const router = useRouter();
@@ -81,12 +83,12 @@ export default function NewQuestionImportPage() {
     }
 
     if (!file) {
-      setError("Choose a CSV file to import.");
+      setError("Choose a CSV or ZIP file to import.");
       return;
     }
 
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      setError("Only .csv files are supported for now.");
+    if (!isSupportedImportFile(file)) {
+      setError("Only .csv and .zip files are supported.");
       return;
     }
 
@@ -102,7 +104,9 @@ export default function NewQuestionImportPage() {
       const batch = await createQuestionImport(formData);
       router.push(`/admin/question-bank/imports/${batch.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Unable to import CSV file.");
+      setError(
+        err instanceof ApiError ? err.message : "Unable to import question file."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -120,7 +124,7 @@ export default function NewQuestionImportPage() {
     <>
       <PageHeader
         title="Import Questions"
-        description="Upload a trusted JAMB or past-exam CSV. Imported questions are saved as drafts for review."
+        description="Upload a trusted JAMB or past-exam CSV or ZIP. Imported questions are saved as drafts for review."
         actions={
           <Link href="/admin/question-bank/imports">
             <Button variant="secondary">Back to Imports</Button>
@@ -158,19 +162,31 @@ export default function NewQuestionImportPage() {
             />
             <label className="block">
               <span className="mb-2 block text-sm font-medium text-ink">
-                CSV file
+                Import file
               </span>
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.zip,text/csv,application/zip,application/x-zip-compressed"
                 required
                 className="block w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink file:mr-4 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => {
+                  const selectedFile = event.target.files?.[0] ?? null;
+                  setFile(selectedFile);
+                  if (selectedFile && !isSupportedImportFile(selectedFile)) {
+                    setError("Only .csv and .zip files are supported.");
+                  } else {
+                    setError("");
+                  }
+                }}
               />
+              <span className="mt-2 block text-xs text-muted">
+                Upload a single questions.csv file, or a ZIP containing
+                questions.csv and a diagrams/ folder.
+              </span>
             </label>
             <div className="flex flex-wrap gap-3">
               <Button type="submit" isLoading={isSubmitting}>
-                Upload CSV
+                Upload Import
               </Button>
               <CsvTemplateDownloadButton />
             </div>
@@ -184,10 +200,10 @@ export default function NewQuestionImportPage() {
             stay as drafts until approved.
           </p>
           <p className="mt-2 text-sm leading-6 text-muted">
+            CSV import: upload a single{" "}
+            <span className="font-semibold text-ink">questions.csv</span> file.
             Use <span className="font-semibold text-ink">diagram_url</span> for
-            hosted diagram images. Use{" "}
-            <span className="font-semibold text-ink">diagram_file_name</span> only
-            as a manual matching hint; it does not upload files yet.
+            hosted diagram images in normal CSV imports.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {requiredColumns.map((column) => (
@@ -215,6 +231,26 @@ export default function NewQuestionImportPage() {
           <p className="mt-4 text-sm leading-6 text-muted">
             Questions with diagrams still import as drafts and must be reviewed
             before assignment or practice use.
+          </p>
+        </Card>
+
+        <Card className="lg:col-start-2">
+          <h2 className="text-base font-semibold text-ink">ZIP Diagram Guide</h2>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            ZIP import: upload an archive with root-level questions.csv and a
+            diagrams/ folder. Put images inside diagrams/ and use
+            diagram_file_name in the CSV to match them.
+          </p>
+          <pre className="mt-4 overflow-x-auto rounded-md bg-surface p-3 text-xs leading-6 text-ink">
+{`questions.csv
+diagrams/
+  math_2024_q1.png
+  math_2024_q2.jpg`}
+          </pre>
+          <p className="mt-4 text-sm leading-6 text-muted">
+            Supported image types: png, jpg, jpeg, webp. Matched images are
+            attached to imported draft questions. Missing images create row
+            warnings and mark the question for manual review.
           </p>
         </Card>
       </div>

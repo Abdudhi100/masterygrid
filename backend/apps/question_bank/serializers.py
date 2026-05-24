@@ -22,7 +22,9 @@ from apps.question_bank.selectors import is_platform_admin
 from apps.question_bank.services import (
     build_question_content_hash,
     create_pending_import_rows,
-    load_csv_import_rows,
+    detect_import_file_type,
+    read_csv_from_upload,
+    read_csv_from_zip,
     validate_question_options,
 )
 from apps.schools.models import School
@@ -561,6 +563,7 @@ class QuestionImportBatchSerializer(serializers.ModelSerializer):
             "successful_rows",
             "failed_rows",
             "duplicate_rows",
+            "warning_rows",
             "error_summary",
             "processed_at",
             "created_at",
@@ -581,6 +584,7 @@ class QuestionImportRowSerializer(serializers.ModelSerializer):
             "raw_data",
             "status",
             "error_message",
+            "warning_message",
             "question",
             "question_text",
             "content_hash",
@@ -606,8 +610,13 @@ class QuestionImportCreateSerializer(serializers.Serializer):
 
     def validate_file(self, value):
         filename = getattr(value, "name", "")
-        if not filename.lower().endswith(".csv"):
-            raise serializers.ValidationError("Only CSV imports are supported for now.")
+        try:
+            detect_import_file_type(value)
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+
+        if not filename.lower().endswith((".csv", ".zip")):
+            raise serializers.ValidationError("Only CSV and ZIP imports are supported.")
         return value
 
     def validate(self, attrs):
@@ -646,15 +655,26 @@ class QuestionImportCreateSerializer(serializers.Serializer):
     def create(self, validated_data):
         request = self.context["request"]
         uploaded_file = validated_data.pop("file")
-        rows = load_csv_import_rows(uploaded_file)
+        file_type = detect_import_file_type(uploaded_file)
+        zip_image_map = None
+        try:
+            if file_type == QuestionImportFileType.ZIP:
+                rows, zip_image_map = read_csv_from_zip(uploaded_file)
+            else:
+                rows = read_csv_from_upload(uploaded_file)
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+
         batch = QuestionImportBatch.objects.create(
             uploaded_by=request.user,
             school=validated_data.get("school"),
             source=validated_data.get("source"),
             title=validated_data["title"],
             original_filename=getattr(uploaded_file, "name", ""),
-            file_type=QuestionImportFileType.CSV,
+            file_type=file_type,
         )
+        if zip_image_map is not None:
+            batch._zip_image_map = zip_image_map
         create_pending_import_rows(batch, rows)
         return batch
 

@@ -21,9 +21,9 @@ Fields:
 - `title` - import batch title
 - `source` - optional existing `QuestionSource` ID
 - `school` - optional, platform admins only; blank means global import
-- `file` - CSV file
+- `file` - CSV file or ZIP archive
 
-The MVP processes CSV imports immediately.
+The MVP processes CSV and ZIP imports immediately.
 
 ## Required CSV Columns
 
@@ -50,6 +50,48 @@ Example with a diagram URL:
 subject,class_level,topic,source_name,source_type,exam_body,year,difficulty,question_text,option_a,option_b,option_c,option_d,correct_option,explanation,has_diagram,diagram_file_name,diagram_url,diagram_description,needs_manual_review
 Mathematics,SS2,Quadratic Equations,JAMB Mathematics,jamb_past_question,JAMB,2024,medium,Use the graph to identify the roots.,-2 and 3,-3 and 2,2 and 3,-2 and -3,A,The x-intercepts give the roots.,true,,https://example.com/diagrams/quadratic-roots.png,Graph of a quadratic curve,true
 ```
+
+## ZIP Imports With Diagrams
+
+ZIP imports use the same CSV columns, but can also attach local diagram files.
+The archive must use this structure:
+
+```text
+questions.csv
+diagrams/
+  physics_2025_q1.png
+  physics_2025_q2.jpg
+  math_2024_q5.webp
+```
+
+For each row, `diagram_file_name` may be either:
+
+```text
+physics_2025_q1.png
+```
+
+or:
+
+```text
+diagrams/physics_2025_q1.png
+```
+
+Allowed diagram image extensions are:
+
+- `.png`
+- `.jpg`
+- `.jpeg`
+- `.webp`
+
+ZIP security rules:
+
+- The archive must contain exactly one root-level `questions.csv`.
+- The importer does not use `extractall()`.
+- Unsafe paths such as `../evil.py`, absolute paths, and backslash traversal are rejected.
+- Unexpected non-ignored files outside `questions.csv` and `diagrams/` are rejected.
+- Harmless system files such as `__MACOSX/` and `.DS_Store` are ignored.
+- Encrypted ZIP entries are not supported.
+- Large ZIPs, very large images, and excessive file counts are rejected.
 
 ## Valid Values
 
@@ -87,10 +129,15 @@ Mathematics,SS2,Quadratic Equations,JAMB Mathematics,jamb_past_question,JAMB,202
 - Duplicate option text in the same question is rejected.
 - Exact duplicate questions are marked as duplicate using a content hash.
 - `diagram_url` creates a `QuestionMedia` record linked to the imported draft question.
+- ZIP imports can attach a matching `diagram_file_name` as `QuestionMedia.image`.
+- If both `diagram_url` and `diagram_file_name` are provided, `diagram_url` is used
+  and the ZIP image is ignored with a row warning.
 - `has_diagram=true` without `diagram_url` still imports the row as draft, marks the
   question for manual review, and keeps the filename in row `raw_data`.
-- `diagram_file_name` is a manual-review hint for now. CSV import does not attach
-  local image files or ZIP contents yet.
+- For CSV-only imports, `diagram_file_name` remains a manual-review hint.
+- For ZIP imports, a missing `diagram_file_name` match does not fail the row; the
+  draft question is marked `needs_manual_review=true` and the row gets a
+  `warning_message`.
 - Diagram questions are never auto-approved.
 
 ## Review Workflow
@@ -147,5 +194,9 @@ AI and does not return draft, rejected, archived, or inactive questions.
 - Invalid difficulty: use `easy`, `medium`, or `hard`.
 - Invalid correct option: use `A`, `B`, `C`, or `D`.
 - Duplicate row: the same normalized question/options already exist.
-- Diagram file not attached: add a `diagram_url` now, or attach the image manually
-  after import when file upload support is available.
+- ZIP `questions.csv` not found: place `questions.csv` at the ZIP root.
+- Unsafe ZIP path: remove paths using `..`, absolute paths, or backslash traversal.
+- Unsupported diagram type: use `.png`, `.jpg`, `.jpeg`, or `.webp`.
+- Duplicate diagram basename: use the full `diagrams/...` path in `diagram_file_name`.
+- Diagram file not found: check the filename under `diagrams/`; the question is still
+  imported as draft and marked for manual review.

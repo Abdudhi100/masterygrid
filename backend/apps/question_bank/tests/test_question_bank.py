@@ -1,3 +1,6 @@
+import io
+import zipfile
+
 from django.test import TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
@@ -88,6 +91,19 @@ class QuestionBankTests(TestCase):
             "questions.csv",
             "\n".join(lines).encode("utf-8"),
             content_type="text/csv",
+        )
+
+    def zip_upload(self, rows, files=None, filename="questions.zip"):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("questions.csv", self.csv_upload(rows).read())
+            for path, content in (files or {}).items():
+                archive.writestr(path, content)
+        buffer.seek(0)
+        return SimpleUploadedFile(
+            filename,
+            buffer.read(),
+            content_type="application/zip",
         )
 
     def import_row(self, **overrides):
@@ -470,7 +486,198 @@ class QuestionBankTests(TestCase):
         self.assertEqual(question.media.count(), 0)
         row = QuestionImportBatch.objects.get(id=response.data["id"]).rows.get()
         self.assertEqual(row.status, QuestionImportRowStatus.IMPORTED)
-        self.assertIn("Warning", row.error_message)
+        self.assertEqual(response.data["warning_rows"], 1)
+        self.assertIn("Warning", row.warning_message)
+
+    def test_import_zip_attaches_matching_diagram_image(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "ZIP Diagram Import",
+                "file": self.zip_upload(
+                    [
+                        self.import_row(
+                            question_text="ZIP diagram question?",
+                            has_diagram="true",
+                            diagram_file_name="physics_2025_q1.png",
+                            diagram_description="A physics diagram",
+                        )
+                    ],
+                    {
+                        "diagrams/physics_2025_q1.png": b"fake image bytes",
+                    },
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "completed")
+        self.assertEqual(response.data["successful_rows"], 1)
+        self.assertEqual(response.data["warning_rows"], 0)
+        question = Question.objects.get(question_text="ZIP diagram question?")
+        self.assertEqual(question.status, QuestionStatus.DRAFT)
+        self.assertTrue(question.has_diagram)
+        self.assertFalse(question.needs_manual_review)
+        media = question.media.get()
+        self.assertTrue(media.image.name.endswith(".png"))
+        self.assertEqual(media.original_filename, "physics_2025_q1.png")
+        self.assertEqual(media.description, "A physics diagram")
+
+    def test_import_zip_matches_diagram_full_path(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "ZIP Path Diagram Import",
+                "file": self.zip_upload(
+                    [
+                        self.import_row(
+                            question_text="ZIP full path diagram question?",
+                            has_diagram="true",
+                            diagram_file_name="diagrams/nested/physics_2025_q2.jpg",
+                        )
+                    ],
+                    {
+                        "diagrams/nested/physics_2025_q2.jpg": b"fake jpg bytes",
+                    },
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        question = Question.objects.get(
+            question_text="ZIP full path diagram question?"
+        )
+        self.assertEqual(question.media.get().original_filename, "physics_2025_q2.jpg")
+
+    def test_import_zip_missing_image_adds_warning_and_manual_review(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "ZIP Missing Diagram Import",
+                "file": self.zip_upload(
+                    [
+                        self.import_row(
+                            question_text="ZIP missing diagram question?",
+                            has_diagram="true",
+                            diagram_file_name="missing.png",
+                        )
+                    ],
+                    {},
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["successful_rows"], 1)
+        self.assertEqual(response.data["warning_rows"], 1)
+        question = Question.objects.get(question_text="ZIP missing diagram question?")
+        self.assertTrue(question.has_diagram)
+        self.assertTrue(question.needs_manual_review)
+        self.assertEqual(question.media.count(), 0)
+        row = QuestionImportBatch.objects.get(id=response.data["id"]).rows.get()
+        self.assertIn("Diagram file not found in ZIP", row.warning_message)
+
+    def test_import_zip_rejects_unsafe_path(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "Unsafe ZIP Import",
+                "file": self.zip_upload(
+                    [self.import_row()],
+                    {"../evil.py": b"print('bad')"},
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Unsafe ZIP path", str(response.data))
+
+    def test_import_zip_rejects_unsupported_diagram_type(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "Unsupported ZIP Import",
+                "file": self.zip_upload(
+                    [self.import_row()],
+                    {"diagrams/vector.svg": b"<svg></svg>"},
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Unsupported diagram image type", str(response.data))
+
+    def test_import_zip_ambiguous_basename_fails_row(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "Ambiguous ZIP Import",
+                "file": self.zip_upload(
+                    [
+                        self.import_row(
+                            question_text="Ambiguous diagram question?",
+                            has_diagram="true",
+                            diagram_file_name="figure.png",
+                        )
+                    ],
+                    {
+                        "diagrams/a/figure.png": b"first",
+                        "diagrams/b/figure.png": b"second",
+                    },
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["failed_rows"], 1)
+        row = QuestionImportBatch.objects.get(id=response.data["id"]).rows.get()
+        self.assertEqual(row.status, QuestionImportRowStatus.FAILED)
+        self.assertIn("ambiguous", row.error_message)
+
+    def test_import_zip_diagram_url_takes_precedence_over_zip_image(self):
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.post(
+            "/api/question-bank/imports/",
+            {
+                "title": "ZIP URL Precedence Import",
+                "file": self.zip_upload(
+                    [
+                        self.import_row(
+                            question_text="URL precedence diagram question?",
+                            has_diagram="true",
+                            diagram_file_name="physics_2025_q1.png",
+                            diagram_url="https://example.com/preferred.png",
+                        )
+                    ],
+                    {
+                        "diagrams/physics_2025_q1.png": b"ignored",
+                    },
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["successful_rows"], 1)
+        self.assertEqual(response.data["warning_rows"], 1)
+        question = Question.objects.get(question_text="URL precedence diagram question?")
+        media = question.media.get()
+        self.assertEqual(media.external_url, "https://example.com/preferred.png")
+        self.assertFalse(bool(media.image))
+        row = QuestionImportBatch.objects.get(id=response.data["id"]).rows.get()
+        self.assertIn("diagram_url was used", row.warning_message)
 
     def test_student_cannot_search_approved_question_bank_directly(self):
         self.client.force_authenticate(self.student)

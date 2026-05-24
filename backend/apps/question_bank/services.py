@@ -1,7 +1,11 @@
 import csv
 import hashlib
 import io
+import posixpath
+import re
+import zipfile
 
+from django.core.files.base import ContentFile
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import URLValidator
 from django.db import transaction
@@ -15,6 +19,7 @@ from apps.question_bank.models import (
     Question,
     QuestionDifficulty,
     QuestionImportBatchStatus,
+    QuestionImportFileType,
     QuestionImportRow,
     QuestionImportRowStatus,
     QuestionMedia,
@@ -53,6 +58,12 @@ CSV_IMPORT_OPTIONAL_COLUMNS = {
 }
 BOOLEAN_TRUE_VALUES = {"1", "true", "yes", "y"}
 BOOLEAN_FALSE_VALUES = {"0", "false", "no", "n", ""}
+ALLOWED_ZIP_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+IGNORED_ZIP_NAMES = {".ds_store", "thumbs.db"}
+MAX_ZIP_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_ZIP_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+MAX_ZIP_FILE_COUNT = 500
+MAX_ZIP_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 class DuplicateQuestionError(Exception):
@@ -97,9 +108,17 @@ def build_question_content_hash(*, question_text, subject, topic, class_level, o
     return hashlib.sha256("||".join(parts).encode("utf-8")).hexdigest()
 
 
-def load_csv_import_rows(uploaded_file):
-    uploaded_file.seek(0)
-    raw_content = uploaded_file.read()
+def detect_import_file_type(uploaded_file):
+    filename = getattr(uploaded_file, "name", "")
+    lower_filename = filename.lower()
+    if lower_filename.endswith(".csv"):
+        return QuestionImportFileType.CSV
+    if lower_filename.endswith(".zip"):
+        return QuestionImportFileType.ZIP
+    raise ValidationError({"file": "Only CSV and ZIP imports are supported."})
+
+
+def parse_csv_import_rows(raw_content):
     if isinstance(raw_content, str):
         text_content = raw_content
     else:
@@ -127,6 +146,223 @@ def load_csv_import_rows(uploaded_file):
             rows.append((line_number, normalized_row))
 
     return rows
+
+
+def load_csv_import_rows(uploaded_file):
+    uploaded_file.seek(0)
+    return parse_csv_import_rows(uploaded_file.read())
+
+
+def read_csv_from_upload(uploaded_file):
+    return load_csv_import_rows(uploaded_file)
+
+
+def is_ignored_zip_member(normalized_path):
+    basename = posixpath.basename(normalized_path).casefold()
+    return normalized_path.casefold().startswith("__macosx/") or basename in IGNORED_ZIP_NAMES
+
+
+def normalize_zip_member_path(name):
+    if not name or "\x00" in name:
+        raise ValidationError({"file": "ZIP contains an invalid file path."})
+
+    normalized = str(name).replace("\\", "/")
+    if normalized.startswith("/") or re.match(r"^[A-Za-z]:", normalized):
+        raise ValidationError({"file": f"Unsafe ZIP path rejected: {name}"})
+
+    normalized = posixpath.normpath(normalized)
+    if normalized in {".", ""}:
+        return ""
+
+    parts = normalized.split("/")
+    if any(part in {"..", ""} for part in parts):
+        raise ValidationError({"file": f"Unsafe ZIP path rejected: {name}"})
+
+    return normalized
+
+
+def get_file_extension(path):
+    _root, extension = posixpath.splitext(path)
+    return extension.casefold()
+
+
+def validate_zip_file(uploaded_file):
+    upload_size = getattr(uploaded_file, "size", None)
+    if upload_size and upload_size > MAX_ZIP_UPLOAD_BYTES:
+        raise ValidationError({"file": "ZIP file is too large."})
+
+    uploaded_file.seek(0)
+    try:
+        zip_file = zipfile.ZipFile(uploaded_file)
+    except zipfile.BadZipFile as exc:
+        raise ValidationError({"file": "Uploaded file is not a valid ZIP archive."}) from exc
+
+    infos = zip_file.infolist()
+    if len(infos) > MAX_ZIP_FILE_COUNT:
+        zip_file.close()
+        raise ValidationError({"file": "ZIP contains too many files."})
+
+    total_uncompressed = 0
+    normalized_infos = []
+    csv_paths = []
+
+    try:
+        for info in infos:
+            normalized_path = normalize_zip_member_path(info.filename)
+            if (
+                not normalized_path
+                or info.is_dir()
+                or is_ignored_zip_member(normalized_path)
+            ):
+                continue
+
+            if info.flag_bits & 0x1:
+                raise ValidationError({"file": "Encrypted ZIP entries are not supported."})
+
+            total_uncompressed += info.file_size
+            if total_uncompressed > MAX_ZIP_UNCOMPRESSED_BYTES:
+                raise ValidationError({"file": "ZIP uncompressed content is too large."})
+
+            if normalized_path == "questions.csv":
+                csv_paths.append(normalized_path)
+            elif normalized_path.startswith("diagrams/"):
+                extension = get_file_extension(normalized_path)
+                if extension not in ALLOWED_ZIP_IMAGE_EXTENSIONS:
+                    raise ValidationError(
+                        {
+                            "file": (
+                                "Unsupported diagram image type in ZIP: "
+                                f"{normalized_path}"
+                            )
+                        }
+                    )
+                if info.file_size > MAX_ZIP_IMAGE_BYTES:
+                    raise ValidationError(
+                        {"file": f"Diagram image is too large: {normalized_path}"}
+                    )
+            else:
+                raise ValidationError(
+                    {"file": f"Unexpected file in ZIP archive: {normalized_path}"}
+                )
+
+            normalized_infos.append((normalized_path, info))
+
+        if len(csv_paths) != 1:
+            if not csv_paths:
+                raise ValidationError(
+                    {"file": "ZIP import must include root questions.csv."}
+                )
+            raise ValidationError(
+                {"file": "ZIP import must include only one questions.csv."}
+            )
+    except ValidationError:
+        zip_file.close()
+        raise
+
+    return zip_file, normalized_infos
+
+
+def normalize_diagram_file_name(name):
+    value = normalize_question_text(name).replace("\\", "/")
+    if not value:
+        return ""
+    if value.startswith("/") or re.match(r"^[A-Za-z]:", value):
+        raise ValidationError({"diagram_file_name": "Unsafe diagram file path."})
+
+    normalized = posixpath.normpath(value)
+    parts = normalized.split("/")
+    if any(part in {"..", ""} for part in parts):
+        raise ValidationError({"diagram_file_name": "Unsafe diagram file path."})
+
+    if "/" in normalized and not normalized.startswith("diagrams/"):
+        raise ValidationError(
+            {
+                "diagram_file_name": (
+                    "Diagram file name must be a basename or a path under diagrams/."
+                )
+            }
+        )
+
+    extension = get_file_extension(normalized)
+    if extension not in ALLOWED_ZIP_IMAGE_EXTENSIONS:
+        raise ValidationError(
+            {
+                "diagram_file_name": (
+                    "Diagram file must be .png, .jpg, .jpeg, or .webp."
+                )
+            }
+        )
+
+    return normalized
+
+
+def build_zip_image_map(zip_file):
+    image_map = {
+        "by_path": {},
+        "by_basename": {},
+    }
+
+    for info in zip_file.infolist():
+        normalized_path = normalize_zip_member_path(info.filename)
+        if (
+            not normalized_path
+            or info.is_dir()
+            or is_ignored_zip_member(normalized_path)
+            or normalized_path == "questions.csv"
+        ):
+            continue
+        if not normalized_path.startswith("diagrams/"):
+            continue
+
+        image_bytes = zip_file.read(info)
+        basename = posixpath.basename(normalized_path)
+        image_record = {
+            "bytes": image_bytes,
+            "path": normalized_path,
+            "filename": basename,
+        }
+        image_map["by_path"][normalized_path.casefold()] = image_record
+        image_map["by_basename"].setdefault(basename.casefold(), []).append(image_record)
+
+    return image_map
+
+
+def get_image_from_zip_map(image_map, diagram_file_name):
+    normalized_name = normalize_diagram_file_name(diagram_file_name)
+    if not normalized_name:
+        return None
+
+    exact_match = image_map.get("by_path", {}).get(normalized_name.casefold())
+    if exact_match:
+        return exact_match
+
+    basename = posixpath.basename(normalized_name).casefold()
+    basename_matches = image_map.get("by_basename", {}).get(basename, [])
+    if len(basename_matches) == 1:
+        return basename_matches[0]
+    if len(basename_matches) > 1:
+        raise ValidationError(
+            {
+                "diagram_file_name": (
+                    f"Diagram filename '{diagram_file_name}' is ambiguous; "
+                    "use the full diagrams/... path."
+                )
+            }
+        )
+    return None
+
+
+def read_csv_from_zip(uploaded_file):
+    zip_file, normalized_infos = validate_zip_file(uploaded_file)
+    try:
+        csv_info = next(info for path, info in normalized_infos if path == "questions.csv")
+        rows = parse_csv_import_rows(zip_file.read(csv_info))
+        image_map = build_zip_image_map(zip_file)
+    finally:
+        zip_file.close()
+        uploaded_file.seek(0)
+
+    return rows, image_map
 
 
 def create_pending_import_rows(batch, rows):
@@ -420,11 +656,48 @@ def validate_import_row(row_data, user, batch):
                 "needs_manual_review": needs_manual_review,
             }
         )
-    elif diagram_requested:
+        if diagram_file_name and batch.file_type == QuestionImportFileType.ZIP:
+            diagram_warning = (
+                f"Warning: diagram_url was used and ZIP image was ignored: "
+                f"{diagram_file_name}"
+            )
+    elif diagram_file_name:
+        if batch.file_type == QuestionImportFileType.ZIP:
+            image_record = get_image_from_zip_map(
+                getattr(batch, "_zip_image_map", {}),
+                diagram_file_name,
+            )
+            if image_record:
+                media.append(
+                    {
+                        "media_type": QuestionMediaType.IMAGE,
+                        "image_bytes": image_record["bytes"],
+                        "original_filename": image_record["filename"],
+                        "description": diagram_description,
+                        "alt_text": diagram_description,
+                        "caption": diagram_description[:255],
+                        "display_order": 1,
+                        "is_primary": True,
+                        "is_active": True,
+                        "needs_manual_review": needs_manual_review,
+                    }
+                )
+            else:
+                needs_manual_review = True
+                diagram_warning = (
+                    f"Diagram file not found in ZIP: {diagram_file_name}"
+                )
+        else:
+            needs_manual_review = True
+            diagram_warning = (
+                "Warning: diagram file must be attached manually; CSV file import "
+                "does not attach local diagram files."
+            )
+    elif has_diagram:
         needs_manual_review = True
         diagram_warning = (
-            "Warning: diagram file must be attached manually; CSV file import "
-            "does not attach diagram files yet."
+            "Warning: question is marked as having a diagram, but no diagram_url "
+            "or diagram_file_name was provided."
         )
 
     return {
@@ -444,6 +717,28 @@ def validate_import_row(row_data, user, batch):
         "media": media,
         "diagram_warning": diagram_warning,
     }
+
+
+def create_question_media_from_uploaded_image(
+    *,
+    question,
+    image_bytes,
+    original_filename,
+    media_data,
+    user,
+):
+    media_payload = dict(media_data)
+    media_payload.pop("image_bytes", None)
+    image_file = ContentFile(image_bytes, name=original_filename)
+    media = QuestionMedia(
+        question=question,
+        created_by=user,
+        image=image_file,
+        **media_payload,
+    )
+    media.full_clean()
+    media.save()
+    return media
 
 
 @transaction.atomic
@@ -466,13 +761,23 @@ def create_question_from_import_row(*, batch, validated_data):
         option.save()
 
     for media_data in media_items:
-        media = QuestionMedia(
-            question=question,
-            created_by=batch.uploaded_by,
-            **media_data,
-        )
-        media.full_clean()
-        media.save()
+        image_bytes = media_data.get("image_bytes")
+        if image_bytes is not None:
+            create_question_media_from_uploaded_image(
+                question=question,
+                image_bytes=image_bytes,
+                original_filename=media_data.get("original_filename", ""),
+                media_data=media_data,
+                user=batch.uploaded_by,
+            )
+        else:
+            media = QuestionMedia(
+                question=question,
+                created_by=batch.uploaded_by,
+                **media_data,
+            )
+            media.full_clean()
+            media.save()
 
     return question
 
@@ -486,6 +791,7 @@ def import_question_row(batch, row_number, row_data):
     import_row.raw_data = row_data
     import_row.status = QuestionImportRowStatus.PENDING
     import_row.error_message = ""
+    import_row.warning_message = ""
     import_row.question = None
     import_row.content_hash = ""
     import_row.save(
@@ -493,6 +799,7 @@ def import_question_row(batch, row_number, row_data):
             "raw_data",
             "status",
             "error_message",
+            "warning_message",
             "question",
             "content_hash",
             "updated_at",
@@ -509,7 +816,7 @@ def import_question_row(batch, row_number, row_data):
         )
         import_row.question = question
         import_row.status = QuestionImportRowStatus.IMPORTED
-        import_row.error_message = diagram_warning
+        import_row.warning_message = diagram_warning
     except DuplicateQuestionError as exc:
         import_row.status = QuestionImportRowStatus.DUPLICATE
         import_row.error_message = str(exc)
@@ -522,6 +829,7 @@ def import_question_row(batch, row_number, row_data):
         update_fields=[
             "status",
             "error_message",
+            "warning_message",
             "question",
             "content_hash",
             "updated_at",
@@ -542,6 +850,7 @@ def process_question_import_batch(batch):
         batch.status = QuestionImportBatchStatus.FAILED
         batch.failed_rows = 0
         batch.duplicate_rows = 0
+        batch.warning_rows = 0
         batch.successful_rows = 0
         batch.error_summary = "No import rows were found."
         batch.processed_at = timezone.now()
@@ -550,6 +859,7 @@ def process_question_import_batch(batch):
                 "status",
                 "failed_rows",
                 "duplicate_rows",
+                "warning_rows",
                 "successful_rows",
                 "error_summary",
                 "processed_at",
@@ -564,6 +874,7 @@ def process_question_import_batch(batch):
     imported_count = batch.rows.filter(status=QuestionImportRowStatus.IMPORTED).count()
     failed_count = batch.rows.filter(status=QuestionImportRowStatus.FAILED).count()
     duplicate_count = batch.rows.filter(status=QuestionImportRowStatus.DUPLICATE).count()
+    warning_count = batch.rows.exclude(warning_message="").count()
     error_rows = batch.rows.exclude(status=QuestionImportRowStatus.IMPORTED).order_by(
         "row_number"
     )[:5]
@@ -574,6 +885,7 @@ def process_question_import_batch(batch):
     batch.successful_rows = imported_count
     batch.failed_rows = failed_count
     batch.duplicate_rows = duplicate_count
+    batch.warning_rows = warning_count
     batch.error_summary = error_summary
     batch.processed_at = timezone.now()
     if failed_count or duplicate_count:
@@ -585,6 +897,7 @@ def process_question_import_batch(batch):
             "successful_rows",
             "failed_rows",
             "duplicate_rows",
+            "warning_rows",
             "error_summary",
             "processed_at",
             "status",

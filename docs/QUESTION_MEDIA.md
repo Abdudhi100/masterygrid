@@ -43,12 +43,37 @@ CSV import supports these optional columns:
 - `diagram_description`
 - `needs_manual_review`
 
-`diagram_url` creates a linked `QuestionMedia` row. `diagram_file_name` is stored
-in import row raw data and marks the question for manual review when no URL is
-provided. ZIP/image file matching is not implemented yet.
+`diagram_url` creates a linked `QuestionMedia` row. CSV-only imports treat
+`diagram_file_name` as a manual-review hint when no URL is provided.
+
+ZIP imports can attach uploaded image files automatically. The ZIP must contain:
+
+```text
+questions.csv
+diagrams/
+  physics_2025_q1.png
+  physics_2025_q2.jpg
+  math_2024_q5.webp
+```
+
+`diagram_file_name` can be either a basename such as `physics_2025_q1.png` or a
+path under `diagrams/`. If the basename is ambiguous, use the full `diagrams/...`
+path.
+
+Allowed image types are `.png`, `.jpg`, `.jpeg`, and `.webp`.
+
+If a ZIP row references a missing image, the question is still imported as
+`draft`, marked for manual review, and the import row receives a
+`warning_message`. If both `diagram_url` and `diagram_file_name` are supplied,
+the URL is used and the ZIP image is ignored with a warning.
 
 Imported questions remain `draft` and must still be approved by a human before
 assignments or practice can use them.
+
+ZIP imports are parsed safely in memory. The backend does not extract archives
+to disk and rejects unsafe paths such as `../evil.py`, absolute paths, encrypted
+entries, unsupported file types, and unexpected files outside `questions.csv` or
+`diagrams/`.
 
 ## API Exposure
 

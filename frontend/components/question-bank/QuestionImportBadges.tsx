@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
 import type {
+  QuestionImportFileType,
   QuestionImportRowStatus,
   QuestionImportStatus
 } from "@/types/questionBank";
@@ -39,4 +40,13 @@ export function QuestionImportRowStatusBadge({
   status: QuestionImportRowStatus;
 }) {
   return <Badge tone={rowTone[status]}>{humanize(status)}</Badge>;
+}
+
+export function QuestionImportFileTypeBadge({
+  fileType
+}: {
+  fileType: QuestionImportFileType;
+}) {
+  const tone: BadgeTone = fileType === "zip" ? "brand" : "neutral";
+  return <Badge tone={tone}>{fileType.toUpperCase()}</Badge>;
 }

@@ -5,9 +5,11 @@ import { useCallback, useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
+  QuestionImportFileTypeBadge,
   QuestionImportRowStatusBadge,
   QuestionImportStatusBadge
 } from "@/components/question-bank/QuestionImportBadges";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
@@ -144,9 +146,7 @@ export default function QuestionImportDetailPage({
           <div>
             <div className="flex flex-wrap gap-2">
               <QuestionImportStatusBadge status={batch.status} />
-              <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-semibold text-muted">
-                {batch.file_type.toUpperCase()}
-              </span>
+              <QuestionImportFileTypeBadge fileType={batch.file_type} />
             </div>
             <dl className="mt-4 grid gap-4 text-sm text-muted sm:grid-cols-2 lg:grid-cols-3">
               <div>
@@ -174,12 +174,13 @@ export default function QuestionImportDetailPage({
         </div>
       </Card>
 
-      <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {[
           ["Total rows", batch.total_rows],
           ["Successful rows", batch.successful_rows],
           ["Failed rows", batch.failed_rows],
-          ["Duplicate rows", batch.duplicate_rows]
+          ["Duplicate rows", batch.duplicate_rows],
+          ["Warning rows", batch.warning_rows ?? 0]
         ].map(([label, value]) => (
           <Card key={label}>
             <p className="text-sm font-medium text-muted">{label}</p>
@@ -210,7 +211,12 @@ export default function QuestionImportDetailPage({
           {
             key: "status",
             header: "Status",
-            render: (row) => <QuestionImportRowStatusBadge status={row.status} />
+            render: (row) =>
+              row.status === "imported" && row.warning_message ? (
+                <Badge tone="warning">imported with warning</Badge>
+              ) : (
+                <QuestionImportRowStatusBadge status={row.status} />
+              )
           },
           {
             key: "error_message",
@@ -218,6 +224,15 @@ export default function QuestionImportDetailPage({
             render: (row) => (
               <span className="block min-w-[16rem] max-w-xl leading-6">
                 {row.error_message || "No error"}
+              </span>
+            )
+          },
+          {
+            key: "warning_message",
+            header: "Warning",
+            render: (row) => (
+              <span className="block min-w-[16rem] max-w-xl leading-6">
+                {row.warning_message || "No warning"}
               </span>
             )
           },

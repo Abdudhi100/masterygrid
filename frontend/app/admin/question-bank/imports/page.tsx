@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { QuestionImportStatusBadge } from "@/components/question-bank/QuestionImportBadges";
+import {
+  QuestionImportFileTypeBadge,
+  QuestionImportStatusBadge
+} from "@/components/question-bank/QuestionImportBadges";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
@@ -65,7 +68,7 @@ export default function AdminQuestionImportsPage() {
     <>
       <PageHeader
         title="Question Imports"
-        description="Upload trusted JAMB and past-exam CSV files, then review imported draft questions before approval."
+        description="Upload trusted JAMB and past-exam CSV or ZIP files, then review imported draft questions before approval."
         actions={
           <Link href="/admin/question-bank/imports/new">
             <Button>New Import</Button>
@@ -81,8 +84,10 @@ export default function AdminQuestionImportsPage() {
 
       <Card className="mb-4">
         <p className="text-sm leading-6 text-muted">
-          Imports create draft questions only. School admins must approve imported
-          questions before teachers can use them in assignments.
+          Imports create draft questions only. ZIP imports can attach diagram
+          images from the diagrams/ folder when diagram_file_name matches.
+          School admins must approve imported questions before teachers can use
+          them in assignments.
         </p>
       </Card>
 
@@ -92,7 +97,7 @@ export default function AdminQuestionImportsPage() {
         <DataTable<QuestionImportBatch>
           data={imports}
           emptyTitle="No imports yet"
-          emptyDescription="Upload a CSV file to start building the trusted question bank."
+          emptyDescription="Upload a CSV or ZIP file to start building the trusted question bank."
           columns={[
             {
               key: "title",
@@ -107,7 +112,7 @@ export default function AdminQuestionImportsPage() {
             {
               key: "file_type",
               header: "File type",
-              render: (row) => row.file_type.toUpperCase()
+              render: (row) => <QuestionImportFileTypeBadge fileType={row.file_type} />
             },
             {
               key: "status",
@@ -133,6 +138,11 @@ export default function AdminQuestionImportsPage() {
               key: "duplicate_rows",
               header: "Duplicates",
               render: (row) => row.duplicate_rows
+            },
+            {
+              key: "warning_rows",
+              header: "Warnings",
+              render: (row) => row.warning_rows ?? 0
             },
             {
               key: "uploaded_by_name",

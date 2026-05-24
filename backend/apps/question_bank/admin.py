@@ -153,6 +153,7 @@ class QuestionImportBatchAdmin(admin.ModelAdmin):
         "successful_rows",
         "failed_rows",
         "duplicate_rows",
+        "warning_rows",
         "created_at",
         "processed_at",
     ]
@@ -172,6 +173,7 @@ class QuestionImportBatchAdmin(admin.ModelAdmin):
         "successful_rows",
         "failed_rows",
         "duplicate_rows",
+        "warning_rows",
         "error_summary",
     ]
     autocomplete_fields = ["school", "uploaded_by", "source"]
@@ -184,6 +186,7 @@ class QuestionImportRowAdmin(admin.ModelAdmin):
         "row_number",
         "status",
         "short_error_message",
+        "short_warning_message",
         "question",
         "content_hash",
         "created_at",
@@ -200,6 +203,7 @@ class QuestionImportRowAdmin(admin.ModelAdmin):
         "updated_at",
         "raw_data",
         "error_message",
+        "warning_message",
         "content_hash",
     ]
     autocomplete_fields = ["batch", "question"]
@@ -207,3 +211,7 @@ class QuestionImportRowAdmin(admin.ModelAdmin):
     @admin.display(description="Error")
     def short_error_message(self, obj):
         return obj.error_message[:80]
+
+    @admin.display(description="Warning")
+    def short_warning_message(self, obj):
+        return obj.warning_message[:80]

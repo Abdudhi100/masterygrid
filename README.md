@@ -112,13 +112,13 @@ test flow.
 
 Trusted JAMB/past-exam questions can be imported into the question bank as draft
 questions for review. See [docs/QUESTION_IMPORT.md](docs/QUESTION_IMPORT.md) for
-the CSV format and workflow.
+the CSV/ZIP formats and workflow.
 
 ## Question Media
 
 Question-bank questions can include optional diagrams through linked media
 records. See [docs/QUESTION_MEDIA.md](docs/QUESTION_MEDIA.md) for the current
-URL-based diagram support and storage notes.
+URL and ZIP diagram support plus storage notes.
 
 ## AI Question Intelligence
 

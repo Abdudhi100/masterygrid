@@ -152,7 +152,7 @@ export type QuestionImportRowStatus =
   | "failed"
   | "duplicate";
 
-export type QuestionImportFileType = "csv" | "xlsx" | "json";
+export type QuestionImportFileType = "csv" | "xlsx" | "json" | "zip";
 
 export type QuestionImportBatch = {
   id: number;
@@ -170,6 +170,7 @@ export type QuestionImportBatch = {
   successful_rows: number;
   failed_rows: number;
   duplicate_rows: number;
+  warning_rows?: number;
   error_summary: string;
   created_at?: string;
   updated_at?: string;
@@ -183,6 +184,7 @@ export type QuestionImportRow = {
   raw_data: Record<string, unknown>;
   status: QuestionImportRowStatus;
   error_message: string;
+  warning_message?: string;
   question: number | null;
   question_text?: string | null;
   content_hash: string;
