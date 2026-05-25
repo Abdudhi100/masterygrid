@@ -1,0 +1,139 @@
+name: E2E Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run a dry-run or confirmed cleanup?"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - confirm
+      run_id:
+        description: "Optional E2E run id to clean"
+        required: false
+        type: string
+      older_than_days:
+        description: "Optional age filter in days"
+        required: false
+        type: string
+      school_id:
+        description: "Optional school id scope"
+        required: false
+        type: string
+      allow_production:
+        description: "Pass --allow-production to the cleanup command?"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      environment_name:
+        description: "GitHub environment name for scoped secrets/approvals"
+        required: false
+        default: staging
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-cleanup-${{ inputs.environment_name || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Cleanup E2E Data
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name || 'staging' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements/prod.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements/prod.txt
+
+      - name: Run cleanup
+        working-directory: backend
+        shell: bash
+        env:
+          DJANGO_ENV: prod
+          DATABASE_URL: ${{ secrets.CLEANUP_DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+          CSRF_TRUSTED_ORIGINS: ${{ secrets.CSRF_TRUSTED_ORIGINS }}
+          AI_GENERATION_ENABLED: "False"
+          MODE: ${{ inputs.mode }}
+          RUN_ID: ${{ inputs.run_id }}
+          OLDER_THAN_DAYS: ${{ inputs.older_than_days }}
+          SCHOOL_ID: ${{ inputs.school_id }}
+          ALLOW_PRODUCTION: ${{ inputs.allow_production }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::CLEANUP_DATABASE_URL secret is required."
+            exit 1
+          fi
+
+          if [ -z "$SECRET_KEY" ]; then
+            echo "::error::SECRET_KEY secret is required."
+            exit 1
+          fi
+
+          export ALLOWED_HOSTS="${ALLOWED_HOSTS:-localhost,127.0.0.1}"
+          export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-}"
+          export CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS:-}"
+
+          if [ -n "$OLDER_THAN_DAYS" ] && ! [[ "$OLDER_THAN_DAYS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::older_than_days must be a positive integer when provided."
+            exit 1
+          fi
+
+          if [ -n "$SCHOOL_ID" ] && ! [[ "$SCHOOL_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::school_id must be a positive integer when provided."
+            exit 1
+          fi
+
+          cmd=(python manage.py cleanup_e2e_data)
+
+          if [ "$MODE" = "confirm" ]; then
+            echo "::warning::Confirmed E2E cleanup requested. Inspect the command and cleanup output carefully."
+            cmd+=(--confirm)
+          fi
+
+          if [ -n "$RUN_ID" ]; then
+            cmd+=(--run-id "$RUN_ID")
+          fi
+
+          if [ -n "$OLDER_THAN_DAYS" ]; then
+            cmd+=(--older-than-days "$OLDER_THAN_DAYS")
+          fi
+
+          if [ -n "$SCHOOL_ID" ]; then
+            cmd+=(--school-id "$SCHOOL_ID")
+          fi
+
+          if [ "$ALLOW_PRODUCTION" = "true" ]; then
+            echo "::warning::Passing --allow-production. Use this only for an intentional disposable staging/demo cleanup."
+            cmd+=(--allow-production)
+          fi
+
+          printf "Cleanup command:"
+          printf " %q" "${cmd[@]}"
+          printf "\n"
+
+          "${cmd[@]}"

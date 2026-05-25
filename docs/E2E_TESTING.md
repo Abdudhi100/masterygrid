@@ -161,7 +161,8 @@ tests to create data against a production-like target.
 The E2E workflow can run in two modes:
 
 - `smoke`: runs only `01-auth-smoke.spec.ts`.
-- `full`: runs `01`, `02`, `03`, and `04`, including seeded/mutating tests.
+- `full`: runs `01`, `02`, `03`, `04`, `05`, and `06`, including
+  seeded/mutating tests.
 
 Pushes to `main` run smoke E2E only when the required secrets exist. If secrets
 are missing, the workflow prints a clear skip message and exits successfully.
@@ -175,7 +176,8 @@ To run the full seeded suite:
 
 Full seeded tests run only when `E2E_ALLOW_PRODUCTION=true` or when the target
 URLs clearly look like staging/demo/preview/local. Seeded tests create school,
-user, question, practice, and assignment data, so use a disposable demo tenant.
+user, question, question-import, practice, and assignment data, so use a
+disposable demo tenant.
 
 ### Playwright Artifacts
 
@@ -232,6 +234,118 @@ cd frontend
 npm.cmd run e2e -- e2e/tests/02-seeded-practice-setup.spec.ts
 ```
 
+## Cleaning E2E Data
+
+Seeded tests deliberately leave data behind after failures so you can inspect the
+school, users, imports, assignments, practice sessions, and media that caused the
+failure. Over time, local/staging/demo databases can accumulate many records with
+`E2E` names and `@masterygrid.test` users.
+
+Use the backend cleanup command to review and remove only clearly identifiable
+E2E-generated records. It is dry-run by default:
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe manage.py cleanup_e2e_data
+```
+
+Delete all matched E2E data in a local/staging/demo database:
+
+```powershell
+.\venv\Scripts\python.exe manage.py cleanup_e2e_data --confirm
+```
+
+Delete one failed run by run id:
+
+```powershell
+.\venv\Scripts\python.exe manage.py cleanup_e2e_data --run-id mpjqjt6py5jjq --confirm
+```
+
+Delete only older test data:
+
+```powershell
+.\venv\Scripts\python.exe manage.py cleanup_e2e_data --older-than-days 7 --confirm
+```
+
+Useful optional scope:
+
+```powershell
+.\venv\Scripts\python.exe manage.py cleanup_e2e_data --school-id 1 --confirm
+```
+
+The command refuses destructive cleanup when `DJANGO_ENV=prod` or `DEBUG=False`
+unless `--allow-production` is provided. Use that flag only for an intentional
+cleanup of a disposable staging/demo tenant:
+
+```powershell
+.\venv\Scripts\python.exe manage.py cleanup_e2e_data --confirm --allow-production
+```
+
+Safety rules:
+
+- E2E users are matched only by emails ending in `@masterygrid.test`.
+- Demo users like `admin@masterygrid.demo` are not matched by user cleanup.
+- Domain records are matched by explicit `E2E` names/titles/text or by links to
+  matched E2E users, questions, assignments, imports, subjects, topics, classes,
+  or sessions.
+- The command prints a deletion plan before deleting and uses a transaction for
+  confirmed cleanup.
+- E2E tests do not auto-delete data by default.
+
+### Manual Cleanup in GitHub Actions
+
+The repository includes `.github/workflows/e2e-cleanup.yml`, a manual-only
+workflow named **E2E Cleanup**. It never runs on push or pull request.
+
+Configure these GitHub repository or environment secrets before using it:
+
+```text
+CLEANUP_DATABASE_URL
+SECRET_KEY
+```
+
+Optional secrets:
+
+```text
+ALLOWED_HOSTS
+CORS_ALLOWED_ORIGINS
+CSRF_TRUSTED_ORIGINS
+```
+
+Recommended process:
+
+1. Open the GitHub Actions tab.
+2. Select **E2E Cleanup**.
+3. Click **Run workflow**.
+4. Choose `mode=dry-run` and add any filters.
+5. Inspect the deletion plan in the workflow logs.
+6. Run again with `mode=confirm` only if the dry-run output is safe.
+
+Useful workflow inputs:
+
+- `run_id`: clean one failed run, for example `mpjqjt6py5jjq`.
+- `older_than_days`: clean accumulated E2E data older than a threshold, for
+  example `7`.
+- `school_id`: restrict cleanup to one school.
+- `environment_name`: choose the GitHub environment that holds the staging/demo
+  cleanup secrets.
+- `allow_production`: passes `--allow-production` to the management command.
+
+Examples:
+
+- Clean one failed run: run dry-run with `run_id=<runId>`, inspect the logs, then
+  rerun with `mode=confirm`.
+- Clean old staging data: run dry-run with `older_than_days=7`, inspect the logs,
+  then rerun with `mode=confirm`.
+- Restrict cleanup: add `school_id=<id>` when a staging database has multiple
+  demo tenants.
+
+The workflow sets `DJANGO_ENV=prod` so it behaves like deployed settings. In
+confirmed mode, the backend command will still refuse cleanup unless
+`allow_production=true` is selected. Do not use `allow_production=true` casually;
+reserve it for disposable staging/demo databases where you have already reviewed
+the dry-run output.
+
 ## Current Coverage
 
 The first suite is `e2e/tests/01-auth-smoke.spec.ts`:
@@ -250,6 +364,19 @@ The first seeded suite is `e2e/tests/02-seeded-practice-setup.spec.ts`:
 The seeded suite uses `loginByApiAndStorage` because login itself is already
 covered by `01-auth-smoke.spec.ts`. This keeps workflow tests focused on setup
 and page behavior instead of repeatedly exercising the login form.
+
+Additional seeded workflow suites:
+
+- `03-student-practice-flow.spec.ts`: student starts practice, submits answers,
+  reviews result, and sees practice analytics.
+- `04-assignment-flow.spec.ts`: teacher creates/publishes an assignment, student
+  submits it, and teacher sees results.
+- `05-question-import-flow.spec.ts`: admin validates/imports a synthetic CSV,
+  opens an imported draft question, approves it, and finds it in the approved
+  question bank.
+- `06-zip-diagram-import-flow.spec.ts`: admin validates/imports a synthetic ZIP
+  with a generated PNG diagram, approves the question, and verifies the diagram
+  appears in student practice attempt and result views.
 
 ## Login Debugging
 

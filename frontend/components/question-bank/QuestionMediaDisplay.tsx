@@ -41,7 +41,10 @@ function QuestionMediaItem({
   const description = item.caption || item.description || item.alt_text;
 
   return (
-    <figure className="rounded-md border border-line bg-surface p-3">
+    <figure
+      className="rounded-md border border-line bg-surface p-3"
+      data-testid="question-media-card"
+    >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Badge tone="brand">Diagram</Badge>
         {item.needs_manual_review ? (
@@ -52,6 +55,7 @@ function QuestionMediaItem({
 
       {url && !hasImageError ? (
         <img
+          data-testid="question-media-image"
           src={url}
           alt={item.alt_text || item.description || item.caption || "Question diagram"}
           className={`w-full rounded-md border border-line bg-white object-contain ${

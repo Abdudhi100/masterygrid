@@ -232,8 +232,7 @@ function PracticeAttemptContent({ sessionId }: { sessionId: string }) {
             <p className="mt-3 text-base font-medium leading-7 text-ink">
               {question.question_text}
             </p>
-            {/* TODO: Backend practice detail payload needs media snapshot exposure. */}
-            <div className="mt-4">
+            <div className="mt-4" data-testid="practice-question-media">
               <QuestionMediaDisplay media={question.media} compact />
             </div>
             <div className="mt-4 space-y-2">

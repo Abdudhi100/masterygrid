@@ -218,7 +218,10 @@ function PreflightReport({
 
   return (
     <div className="mt-6 space-y-6">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+      <section
+        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6"
+        data-testid="import-preflight-summary"
+      >
         <SummaryCard label="Total Rows" value={report.total_rows} />
         <SummaryCard
           label="Valid Rows"
@@ -545,6 +548,7 @@ export default function NewQuestionImportPage() {
           <div className="space-y-4">
             <Input
               label="Import title"
+              data-testid="import-title-input"
               value={title}
               placeholder="JAMB Mathematics 2024"
               required
@@ -571,6 +575,7 @@ export default function NewQuestionImportPage() {
               </span>
               <input
                 type="file"
+                data-testid="import-file-input"
                 accept=".csv,.zip,text/csv,application/zip,application/x-zip-compressed"
                 required
                 className="block w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink file:mr-4 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700"
@@ -590,6 +595,7 @@ export default function NewQuestionImportPage() {
               <Button
                 type="button"
                 variant="secondary"
+                data-testid="import-validate-button"
                 isLoading={isValidating}
                 disabled={!file || isImporting}
                 onClick={handleValidate}
@@ -598,6 +604,7 @@ export default function NewQuestionImportPage() {
               </Button>
               <Button
                 type="button"
+                data-testid="import-now-button"
                 isLoading={isImporting}
                 disabled={!preflight?.can_import || isValidating}
                 onClick={handleImport}

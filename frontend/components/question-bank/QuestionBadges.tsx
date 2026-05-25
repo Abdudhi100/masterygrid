@@ -1,3 +1,5 @@
+import type { HTMLAttributes } from "react";
+
 import { Badge } from "@/components/ui/Badge";
 import type { QuestionDifficulty, QuestionStatus } from "@/types/questionBank";
 
@@ -20,14 +22,26 @@ function humanize(value: string) {
   return value.replaceAll("_", " ");
 }
 
-export function QuestionStatusBadge({ status }: { status: QuestionStatus }) {
-  return <Badge tone={statusTone[status]}>{humanize(status)}</Badge>;
+export function QuestionStatusBadge({
+  status,
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & { status: QuestionStatus }) {
+  return (
+    <Badge tone={statusTone[status]} {...props}>
+      {humanize(status)}
+    </Badge>
+  );
 }
 
 export function QuestionDifficultyBadge({
-  difficulty
-}: {
+  difficulty,
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & {
   difficulty: QuestionDifficulty;
 }) {
-  return <Badge tone={difficultyTone[difficulty]}>{humanize(difficulty)}</Badge>;
+  return (
+    <Badge tone={difficultyTone[difficulty]} {...props}>
+      {humanize(difficulty)}
+    </Badge>
+  );
 }

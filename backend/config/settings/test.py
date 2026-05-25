@@ -10,7 +10,9 @@ PASSWORD_HASHERS = [
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
-DATABASES["default"]["TEST"] = {  # noqa: F405
-    "NAME": env("TEST_DATABASE_NAME", default="test_masterygrid"),  # noqa: F405
-}
+TEST_DATABASE_NAME = env("TEST_DATABASE_NAME", default=None)  # noqa: F405
 
+if TEST_DATABASE_NAME:
+    DATABASES["default"]["TEST"] = {"NAME": TEST_DATABASE_NAME}  # noqa: F405
+elif DATABASES["default"]["ENGINE"] != "django.db.backends.sqlite3":  # noqa: F405
+    DATABASES["default"]["TEST"] = {"NAME": "test_masterygrid"}  # noqa: F405

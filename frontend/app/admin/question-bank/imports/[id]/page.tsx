@@ -174,7 +174,10 @@ export default function QuestionImportDetailPage({
         </div>
       </Card>
 
-      <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section
+        className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5"
+        data-testid="import-detail-summary"
+      >
         {[
           ["Total rows", batch.total_rows],
           ["Successful rows", batch.successful_rows],
@@ -243,6 +246,7 @@ export default function QuestionImportDetailPage({
               row.question ? (
                 <Link
                   href={`/admin/question-bank/${row.question}`}
+                  data-testid="imported-question-link"
                   className="font-semibold text-brand-700 hover:underline"
                 >
                   {row.question_text ?? `Question ${row.question}`}

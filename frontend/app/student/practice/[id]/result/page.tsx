@@ -150,8 +150,7 @@ function PracticeResultContent({ sessionId }: { sessionId: string }) {
             <p className="mt-3 text-base font-medium leading-7 text-ink">
               {answer.question_text}
             </p>
-            {/* TODO: Backend practice result payload needs media snapshot exposure. */}
-            <div className="mt-4">
+            <div className="mt-4" data-testid="practice-result-media">
               <QuestionMediaDisplay media={answer.media} compact />
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">

@@ -16,7 +16,7 @@ env = environ.Env(
 
 ENV_FILE = BASE_DIR / ".env"
 if ENV_FILE.exists():
-    environ.Env.read_env(ENV_FILE)
+    environ.Env.read_env(ENV_FILE, overwrite=False)
 
 SECRET_KEY = env(
     "SECRET_KEY",
@@ -95,16 +95,23 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("DATABASE_NAME", default="masterygrid"),
-        "USER": env("DATABASE_USER", default="masterygrid_user"),
-        "PASSWORD": env("DATABASE_PASSWORD", default=""),
-        "HOST": env("DATABASE_HOST", default="localhost"),
-        "PORT": env.int("DATABASE_PORT", default=5432),
+DATABASE_URL = env("DATABASE_URL", default=None)
+
+if DATABASE_URL:
+    DATABASES = {
+        "default": env.db("DATABASE_URL"),
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": env("DATABASE_NAME", default="masterygrid"),
+            "USER": env("DATABASE_USER", default="masterygrid_user"),
+            "PASSWORD": env("DATABASE_PASSWORD", default=""),
+            "HOST": env("DATABASE_HOST", default="localhost"),
+            "PORT": env.int("DATABASE_PORT", default=5432),
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {

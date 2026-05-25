@@ -109,6 +109,7 @@ export async function seedPracticeWorkflowData(
   assertProductionAllowedForMutatingTests();
 
   const runId = uniqueRunId();
+  console.log(`[e2e] seed runId=${runId}`);
   const tokenPair: TokenPair = await loginApi(
     request,
     credentials.admin.email,

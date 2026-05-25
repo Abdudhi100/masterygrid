@@ -61,6 +61,7 @@ export function QuestionReviewActions({
       {question.status === "draft" ? (
         <>
           <Button
+            data-testid="question-approve-button"
             isLoading={loadingAction === "approve"}
             onClick={() =>
               runAction("approve", approveQuestion, "Question approved.")
@@ -70,6 +71,7 @@ export function QuestionReviewActions({
           </Button>
           <Button
             variant="secondary"
+            data-testid="question-reject-button"
             isLoading={loadingAction === "reject"}
             onClick={() =>
               runAction("reject", rejectQuestion, "Question rejected.")
@@ -82,6 +84,7 @@ export function QuestionReviewActions({
       {question.status !== "archived" ? (
         <Button
           variant="ghost"
+          data-testid="question-archive-button"
           isLoading={loadingAction === "archive"}
           onClick={() =>
             runAction("archive", archiveQuestion, "Question archived.")

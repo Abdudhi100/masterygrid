@@ -295,14 +295,21 @@ export function QuestionDetailContent({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap gap-2">
-              <QuestionStatusBadge status={question.status} />
+              <QuestionStatusBadge
+                status={question.status}
+                data-testid="question-status-badge"
+              />
               <QuestionDifficultyBadge difficulty={question.difficulty} />
               {question.school_name ? (
                 <Badge tone="brand">{question.school_name}</Badge>
               ) : (
                 <Badge tone="success">global</Badge>
               )}
-              {question.has_diagram ? <Badge tone="brand">has diagram</Badge> : null}
+              {question.has_diagram ? (
+                <Badge tone="brand" data-testid="question-diagram-badge">
+                  has diagram
+                </Badge>
+              ) : null}
               {question.needs_manual_review ? (
                 <Badge tone="warning">needs manual review</Badge>
               ) : null}
