@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -161,6 +163,18 @@ export default function AdminWeakStudentsPage() {
                     <span className="block min-w-[18rem] max-w-lg leading-6">
                       {row.recommendation}
                     </span>
+                  )
+                },
+                {
+                  key: "action",
+                  header: "Action",
+                  render: (row) => (
+                    <Link
+                      href={`/admin/students/${row.student_id}/progress-report`}
+                      data-testid="student-progress-link"
+                    >
+                      <Button variant="secondary">Progress Report</Button>
+                    </Link>
                   )
                 }
               ]}

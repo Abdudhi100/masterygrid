@@ -1,7 +1,10 @@
 from collections import defaultdict
+from urllib.parse import urlencode
 
+from django.core.exceptions import PermissionDenied
 from django.db.models import Avg, Count, Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from apps.academics.models import StudentEnrollment, TeacherClassSubjectAssignment
 from apps.analytics.selectors import (
@@ -21,8 +24,10 @@ from apps.analytics.selectors import (
     get_teacher_student_submissions,
     get_teacher_students,
 )
-from apps.common.choices import AssignmentStatus, SubmissionStatus
+from apps.common.choices import AssignmentStatus, SubmissionStatus, UserRole
 from apps.common.choices import QuestionStatus
+from apps.practice.analytics import get_student_learning_path
+from apps.practice.models import PracticeSession, PracticeSessionStatus
 from apps.question_bank.models import Question
 from apps.submissions.models import Submission
 
@@ -1774,6 +1779,556 @@ def get_admin_intervention_dashboard(user, school_id=None):
         "weak_student_clusters": weak_student_clusters,
         "assignment_compliance_alerts": assignment_compliance_alerts,
         "recommended_actions": urgent_interventions[:5],
+    }
+
+
+def teacher_can_view_student_progress(teacher, student):
+    if not teacher or teacher.role != UserRole.TEACHER or not teacher.school_id:
+        return False
+    if student.school_id != teacher.school_id:
+        return False
+
+    teaches_student_class = TeacherClassSubjectAssignment.objects.filter(
+        school=teacher.school,
+        teacher=teacher,
+        is_active=True,
+        class_arm_id__in=StudentEnrollment.objects.filter(
+            school=teacher.school,
+            student=student,
+            is_active=True,
+        ).values("class_arm_id"),
+    ).exists()
+    if teaches_student_class:
+        return True
+
+    return Submission.objects.filter(
+        school=teacher.school,
+        student=student,
+        assignment__teacher=teacher,
+    ).exists()
+
+
+def resolve_student_for_progress_report(user, student_id, school_id=None):
+    student_queryset = get_school_students(None).select_related("school")
+
+    if not user or not user.is_authenticated:
+        raise PermissionDenied("Authentication is required.")
+
+    if user.role == UserRole.SCHOOL_ADMIN and user.school_id:
+        return get_object_or_404(
+            student_queryset.filter(school=user.school),
+            pk=student_id,
+        )
+
+    if user.role == UserRole.PLATFORM_ADMIN or getattr(user, "is_superuser", False):
+        if school_id:
+            student_queryset = student_queryset.filter(school_id=school_id)
+        return get_object_or_404(student_queryset, pk=student_id)
+
+    if user.role == UserRole.TEACHER:
+        student = get_object_or_404(
+            student_queryset.filter(school=user.school),
+            pk=student_id,
+        )
+        if teacher_can_view_student_progress(user, student):
+            return student
+        raise PermissionDenied("You do not teach this student.")
+
+    raise PermissionDenied("You do not have access to student progress reports.")
+
+
+def _active_student_enrollment(student):
+    if not student.school_id:
+        return None
+    return (
+        StudentEnrollment.objects.filter(
+            school=student.school,
+            student=student,
+            is_active=True,
+        )
+        .select_related("class_arm", "class_arm__class_level", "academic_session", "term")
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _student_profile_for_report(student):
+    enrollment = _active_student_enrollment(student)
+    class_arm = enrollment.class_arm if enrollment else None
+    return {
+        "id": student.id,
+        "full_name": student.full_name,
+        "email": student.email,
+        "admission_number": admission_number_for(student),
+        "class_arm": str(class_arm) if class_arm else None,
+        "class_arm_id": class_arm.id if class_arm else None,
+        "class_level": class_arm.class_level.name if class_arm else None,
+        "class_level_id": class_arm.class_level_id if class_arm else None,
+        "school": student.school.name if student.school_id else None,
+        "school_id": student.school_id,
+    }
+
+
+def _weighted_average_from_scores(score, total_marks):
+    if not total_marks:
+        return None
+    return round(score / total_marks * 100, 2)
+
+
+def _report_average(value):
+    return 0.0 if value is None else percentage_value(value)
+
+
+def _assignment_queryset_for_progress(user, student):
+    if user.role == UserRole.TEACHER:
+        return get_teacher_assignments(user)
+    return get_school_assignments(student.school)
+
+
+def _graded_assignment_submissions_for_progress(assignments, student):
+    return list(
+        Submission.objects.filter(
+            assignment__in=assignments,
+            student=student,
+            graded_at__isnull=False,
+        )
+        .select_related(
+            "assignment",
+            "assignment__subject",
+            "assignment__topic",
+            "assignment__class_arm",
+            "assignment__teacher",
+        )
+        .order_by("-graded_at", "-updated_at")
+    )
+
+
+def _assignment_breakdown(graded_submissions, group_type):
+    grouped = {}
+    for submission in graded_submissions:
+        assignment = submission.assignment
+        if group_type == "subject":
+            key = assignment.subject_id
+            defaults = {
+                "subject_id": assignment.subject_id,
+                "subject_name": assignment.subject.name,
+            }
+        else:
+            key = assignment.topic_id
+            defaults = {
+                "subject_id": assignment.subject_id,
+                "subject_name": assignment.subject.name,
+                "topic_id": assignment.topic_id,
+                "topic_title": assignment.topic.title,
+            }
+
+        item = grouped.setdefault(
+            key,
+            {
+                **defaults,
+                "graded_assignments_count": 0,
+                "score": 0,
+                "total_marks": 0,
+                "last_graded_at": None,
+            },
+        )
+        item["graded_assignments_count"] += 1
+        item["score"] += submission.score
+        item["total_marks"] += submission.total_marks
+        if (
+            item["last_graded_at"] is None
+            or (
+                submission.graded_at is not None
+                and submission.graded_at > item["last_graded_at"]
+            )
+        ):
+            item["last_graded_at"] = submission.graded_at
+
+    rows = []
+    for item in grouped.values():
+        score = item.pop("score")
+        total_marks = item.pop("total_marks")
+        item["average_percentage"] = _report_average(
+            _weighted_average_from_scores(score, total_marks)
+        )
+        rows.append(item)
+
+    return sorted(rows, key=lambda row: row["average_percentage"])
+
+
+def _recent_assignment_results(graded_submissions, limit=10):
+    return [
+        {
+            "submission_id": submission.id,
+            "assignment_id": submission.assignment_id,
+            "assignment_title": submission.assignment.title,
+            "teacher_name": submission.assignment.teacher.full_name,
+            "class_arm": str(submission.assignment.class_arm),
+            "subject_id": submission.assignment.subject_id,
+            "subject_name": submission.assignment.subject.name,
+            "topic_id": submission.assignment.topic_id,
+            "topic_title": submission.assignment.topic.title,
+            "score": submission.score,
+            "total_marks": submission.total_marks,
+            "percentage": percentage_value(submission.percentage),
+            "submitted_at": submission.submitted_at,
+            "graded_at": submission.graded_at,
+        }
+        for submission in graded_submissions[:limit]
+    ]
+
+
+def _practice_sessions_for_progress(student):
+    if not student.school_id:
+        return PracticeSession.objects.none()
+
+    return PracticeSession.objects.filter(
+        school=student.school,
+        student=student,
+        status=PracticeSessionStatus.SUBMITTED,
+    ).select_related("subject", "topic", "class_level", "class_arm")
+
+
+def _practice_breakdown(sessions, group_type):
+    grouped = {}
+    for session in sessions:
+        if group_type == "topic" and not session.topic_id:
+            continue
+        if group_type == "subject":
+            key = session.subject_id
+            defaults = {
+                "subject_id": session.subject_id,
+                "subject_name": session.subject.name,
+            }
+        else:
+            key = session.topic_id
+            defaults = {
+                "subject_id": session.subject_id,
+                "subject_name": session.subject.name,
+                "topic_id": session.topic_id,
+                "topic_title": session.topic.title,
+            }
+
+        item = grouped.setdefault(
+            key,
+            {
+                **defaults,
+                "sessions_completed": 0,
+                "questions_answered": 0,
+                "correct_answers": 0,
+                "score": 0,
+                "total_marks": 0,
+                "last_practiced_at": None,
+            },
+        )
+        item["sessions_completed"] += 1
+        item["questions_answered"] += session.answers.count()
+        item["correct_answers"] += session.answers.filter(is_correct=True).count()
+        item["score"] += session.score
+        item["total_marks"] += session.total_marks
+        if (
+            item["last_practiced_at"] is None
+            or (
+                session.submitted_at is not None
+                and session.submitted_at > item["last_practiced_at"]
+            )
+        ):
+            item["last_practiced_at"] = session.submitted_at
+
+    rows = []
+    for item in grouped.values():
+        score = item.pop("score")
+        total_marks = item.pop("total_marks")
+        item["average_percentage"] = _report_average(
+            _weighted_average_from_scores(score, total_marks)
+        )
+        rows.append(item)
+
+    return sorted(rows, key=lambda row: row["average_percentage"])
+
+
+def _recent_practice_sessions(sessions, limit=10):
+    return [
+        {
+            "id": session.id,
+            "subject_id": session.subject_id,
+            "subject_name": session.subject.name,
+            "topic_id": session.topic_id,
+            "topic_title": session.topic.title if session.topic_id else None,
+            "class_level_id": session.class_level_id,
+            "class_level_name": session.class_level.name if session.class_level_id else None,
+            "difficulty": session.difficulty,
+            "question_count_requested": session.question_count_requested,
+            "score": session.score,
+            "total_marks": session.total_marks,
+            "percentage": percentage_value(session.percentage),
+            "submitted_at": session.submitted_at,
+        }
+        for session in sorted(
+            sessions,
+            key=lambda session: session.submitted_at or session.updated_at,
+            reverse=True,
+        )[:limit]
+    ]
+
+
+def _combined_topic_rows(assignment_topic_rows, practice_topic_rows):
+    grouped = {}
+    for row in assignment_topic_rows:
+        item = grouped.setdefault(
+            row["topic_id"],
+            {
+                "subject_id": row["subject_id"],
+                "subject_name": row["subject_name"],
+                "topic_id": row["topic_id"],
+                "topic_title": row["topic_title"],
+                "assignment_average": None,
+                "practice_average": None,
+                "assignment_count": 0,
+                "practice_sessions_count": 0,
+            },
+        )
+        item["assignment_average"] = row["average_percentage"]
+        item["assignment_count"] = row["graded_assignments_count"]
+
+    for row in practice_topic_rows:
+        item = grouped.setdefault(
+            row["topic_id"],
+            {
+                "subject_id": row["subject_id"],
+                "subject_name": row["subject_name"],
+                "topic_id": row["topic_id"],
+                "topic_title": row["topic_title"],
+                "assignment_average": None,
+                "practice_average": None,
+                "assignment_count": 0,
+                "practice_sessions_count": 0,
+            },
+        )
+        item["practice_average"] = row["average_percentage"]
+        item["practice_sessions_count"] = row["sessions_completed"]
+
+    rows = []
+    for item in grouped.values():
+        averages = [
+            value
+            for value in [item["assignment_average"], item["practice_average"]]
+            if value is not None
+        ]
+        item["average_percentage"] = (
+            round(sum(averages) / len(averages), 2) if averages else 0.0
+        )
+        item["evidence_count"] = (
+            item["assignment_count"] + item["practice_sessions_count"]
+        )
+        rows.append(item)
+    return rows
+
+
+def _progress_weak_topics(assignment_topic_rows, practice_topic_rows, limit=8):
+    rows = [
+        row
+        for row in _combined_topic_rows(assignment_topic_rows, practice_topic_rows)
+        if row["average_percentage"] < WEAK_TOPIC_THRESHOLD
+    ]
+    return sorted(rows, key=lambda row: (row["average_percentage"], -row["evidence_count"]))[
+        :limit
+    ]
+
+
+def _progress_strong_topics(assignment_topic_rows, practice_topic_rows, limit=8):
+    rows = [
+        row
+        for row in _combined_topic_rows(assignment_topic_rows, practice_topic_rows)
+        if row["average_percentage"] >= 70
+    ]
+    return sorted(
+        rows,
+        key=lambda row: (-row["average_percentage"], -row["evidence_count"]),
+    )[:limit]
+
+
+def _student_progress_risk_level(
+    overall_average,
+    missed_assignments_count,
+    *,
+    has_performance_evidence,
+):
+    if not has_performance_evidence and missed_assignments_count == 0:
+        return "low"
+    if missed_assignments_count >= 3 or overall_average < 40:
+        return "critical"
+    if overall_average < 50:
+        return "high"
+    if overall_average < 65:
+        return "moderate"
+    return "low"
+
+
+def _progress_recommendations(weak_topics, missed_assignments, profile, limit=5):
+    recommendations = []
+    for row in weak_topics[:limit]:
+        question_count = 5
+        title = f"Remedial: {row['topic_title']}"
+        instructions = (
+            f"Focus on {row['topic_title']} because recent performance is "
+            f"{row['average_percentage']:.2f}%."
+        )
+        query = urlencode(
+            {
+                "classArm": profile["class_arm_id"] or "",
+                "subject": row["subject_id"],
+                "topic": row["topic_id"],
+                "questionCount": question_count,
+                "title": title,
+                "instructions": instructions,
+                "remedial": "true",
+            }
+        )
+        recommendations.append(
+            {
+                "recommended_action": "Schedule targeted practice or a remedial assignment.",
+                "subject_id": row["subject_id"],
+                "subject_name": row["subject_name"],
+                "topic_id": row["topic_id"],
+                "topic_title": row["topic_title"],
+                "reason": (
+                    f"Combined assignment/practice average is "
+                    f"{row['average_percentage']:.2f}%."
+                ),
+                "action_payload": {
+                    "type": "remedial_assignment",
+                    "class_arm": profile["class_arm_id"],
+                    "subject": row["subject_id"],
+                    "topic": row["topic_id"],
+                    "question_count": question_count,
+                    "title": title,
+                    "instructions": instructions,
+                    "remedial": True,
+                    "href": f"/teacher/assignments/new?{query}"
+                    if profile["class_arm_id"]
+                    else "",
+                },
+            }
+        )
+
+    if len(recommendations) < limit and missed_assignments:
+        recommendations.append(
+            {
+                "recommended_action": "Follow up on missed assignments.",
+                "subject_id": None,
+                "subject_name": "",
+                "topic_id": None,
+                "topic_title": "",
+                "reason": f"{len(missed_assignments)} published assignment(s) have not been submitted.",
+                "action_payload": {
+                    "type": "missed_assignment_follow_up",
+                    "href": "/admin/analytics/compliance",
+                },
+            }
+        )
+
+    return recommendations[:limit]
+
+
+def get_student_progress_report(user, student_id, school_id=None):
+    student = resolve_student_for_progress_report(user, student_id, school_id=school_id)
+    profile = _student_profile_for_report(student)
+    assignments = _assignment_queryset_for_progress(user, student)
+    submissions = list(
+        Submission.objects.filter(
+            assignment__in=assignments,
+            student=student,
+        ).select_related("assignment", "assignment__subject", "assignment__topic")
+    )
+    graded_submissions = _graded_assignment_submissions_for_progress(
+        assignments,
+        student,
+    )
+    missed_assignments = get_missed_assignments(assignments, student, submissions)
+    assignment_subject_breakdown = _assignment_breakdown(
+        graded_submissions,
+        "subject",
+    )
+    assignment_topic_breakdown = _assignment_breakdown(graded_submissions, "topic")
+
+    practice_sessions = list(_practice_sessions_for_progress(student))
+    practice_subject_breakdown = _practice_breakdown(practice_sessions, "subject")
+    practice_topic_breakdown = _practice_breakdown(practice_sessions, "topic")
+
+    assignment_score = sum(submission.score for submission in graded_submissions)
+    assignment_total_marks = sum(submission.total_marks for submission in graded_submissions)
+    practice_score = sum(session.score for session in practice_sessions)
+    practice_total_marks = sum(session.total_marks for session in practice_sessions)
+    assignment_average = _weighted_average_from_scores(
+        assignment_score,
+        assignment_total_marks,
+    )
+    practice_average = _weighted_average_from_scores(
+        practice_score,
+        practice_total_marks,
+    )
+    overall_average = _weighted_average_from_scores(
+        assignment_score + practice_score,
+        assignment_total_marks + practice_total_marks,
+    )
+    weak_topics = _progress_weak_topics(
+        assignment_topic_breakdown,
+        practice_topic_breakdown,
+    )
+    strong_topics = _progress_strong_topics(
+        assignment_topic_breakdown,
+        practice_topic_breakdown,
+    )
+    overall_average_value = _report_average(overall_average)
+    risk_level = _student_progress_risk_level(
+        overall_average_value,
+        len(missed_assignments),
+        has_performance_evidence=bool(
+            assignment_total_marks + practice_total_marks
+        ),
+    )
+
+    learning_path = get_student_learning_path(student)
+
+    return {
+        "student": profile,
+        "summary": {
+            "assignment_average": _report_average(assignment_average),
+            "practice_average": _report_average(practice_average),
+            "overall_average": overall_average_value,
+            "graded_assignments_count": len(graded_submissions),
+            "missed_assignments_count": len(missed_assignments),
+            "practice_sessions_count": len(practice_sessions),
+            "weak_topic_count": len(weak_topics),
+            "strong_topic_count": len(strong_topics),
+            "risk_level": risk_level,
+        },
+        "assignment_performance": {
+            "recent_results": _recent_assignment_results(graded_submissions),
+            "subject_breakdown": assignment_subject_breakdown,
+            "topic_breakdown": assignment_topic_breakdown,
+            "missed_assignments": missed_assignments,
+        },
+        "practice_performance": {
+            "recent_sessions": _recent_practice_sessions(practice_sessions),
+            "subject_breakdown": practice_subject_breakdown,
+            "topic_breakdown": practice_topic_breakdown,
+        },
+        "weak_topics": weak_topics,
+        "strong_topics": strong_topics,
+        "recommendations": _progress_recommendations(
+            weak_topics,
+            missed_assignments,
+            profile,
+        ),
+        "learning_path_summary": {
+            "overall_status": learning_path["overall_status"],
+            "headline": learning_path["headline"],
+            "message": learning_path["message"],
+            "recommended_next_action": learning_path["recommended_next_action"],
+        },
+        "generated_at": timezone.now(),
     }
 
 

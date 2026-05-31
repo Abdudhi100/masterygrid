@@ -425,6 +425,140 @@ export type TeacherStudentPerformance = {
   recommendation: string;
 };
 
+export type StudentProgressRiskLevel = "critical" | "high" | "moderate" | "low";
+
+export type StudentProgressProfile = {
+  id: number;
+  full_name: string;
+  email: string;
+  admission_number: string | null;
+  class_arm: string | null;
+  class_arm_id: number | null;
+  class_level: string | null;
+  class_level_id: number | null;
+  school: string | null;
+  school_id: number | null;
+};
+
+export type StudentProgressSummary = {
+  assignment_average: number;
+  practice_average: number;
+  overall_average: number;
+  graded_assignments_count: number;
+  missed_assignments_count: number;
+  practice_sessions_count: number;
+  weak_topic_count: number;
+  strong_topic_count: number;
+  risk_level: StudentProgressRiskLevel;
+};
+
+export type StudentProgressAssignmentResult = {
+  submission_id: number;
+  assignment_id: number;
+  assignment_title: string;
+  teacher_name: string;
+  class_arm: string;
+  subject_id: number;
+  subject_name: string;
+  topic_id: number;
+  topic_title: string;
+  score: number;
+  total_marks: number;
+  percentage: number;
+  submitted_at: string | null;
+  graded_at: string | null;
+};
+
+export type StudentProgressSubjectBreakdown = {
+  subject_id: number;
+  subject_name: string;
+  average_percentage: number;
+  graded_assignments_count?: number;
+  sessions_completed?: number;
+  questions_answered?: number;
+  correct_answers?: number;
+  last_graded_at?: string | null;
+  last_practiced_at?: string | null;
+};
+
+export type StudentProgressTopicBreakdown = StudentProgressSubjectBreakdown & {
+  topic_id: number;
+  topic_title: string;
+};
+
+export type StudentProgressMissedAssignment = {
+  assignment_id: number;
+  title: string;
+  subject: string;
+  topic: string;
+  due_at: string | null;
+};
+
+export type StudentProgressPracticeSession = {
+  id: number;
+  subject_id: number;
+  subject_name: string;
+  topic_id: number | null;
+  topic_title: string | null;
+  class_level_id: number | null;
+  class_level_name: string | null;
+  difficulty: string;
+  question_count_requested: number;
+  score: number;
+  total_marks: number;
+  percentage: number;
+  submitted_at: string | null;
+};
+
+export type StudentProgressTopic = {
+  subject_id: number;
+  subject_name: string;
+  topic_id: number;
+  topic_title: string;
+  assignment_average: number | null;
+  practice_average: number | null;
+  assignment_count: number;
+  practice_sessions_count: number;
+  average_percentage: number;
+  evidence_count: number;
+};
+
+export type StudentProgressRecommendation = {
+  recommended_action: string;
+  subject_id: number | null;
+  subject_name: string;
+  topic_id: number | null;
+  topic_title: string;
+  reason: string;
+  action_payload: Record<string, string | number | boolean | null>;
+};
+
+export type StudentProgressReport = {
+  student: StudentProgressProfile;
+  summary: StudentProgressSummary;
+  assignment_performance: {
+    recent_results: StudentProgressAssignmentResult[];
+    subject_breakdown: StudentProgressSubjectBreakdown[];
+    topic_breakdown: StudentProgressTopicBreakdown[];
+    missed_assignments: StudentProgressMissedAssignment[];
+  };
+  practice_performance: {
+    recent_sessions: StudentProgressPracticeSession[];
+    subject_breakdown: StudentProgressSubjectBreakdown[];
+    topic_breakdown: StudentProgressTopicBreakdown[];
+  };
+  weak_topics: StudentProgressTopic[];
+  strong_topics: StudentProgressTopic[];
+  recommendations: StudentProgressRecommendation[];
+  learning_path_summary: {
+    overall_status: string;
+    headline: string;
+    message: string;
+    recommended_next_action: Record<string, unknown> | null;
+  };
+  generated_at: string;
+};
+
 export type AssignmentResultSummary = {
   total_students_expected: number;
   total_started: number;

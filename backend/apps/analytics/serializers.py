@@ -322,3 +322,141 @@ class AdminInterventionDashboardSerializer(serializers.Serializer):
     weak_student_clusters = AdminWeakStudentClusterSerializer(many=True)
     assignment_compliance_alerts = AdminAssignmentComplianceAlertSerializer(many=True)
     recommended_actions = AdminUrgentInterventionSerializer(many=True)
+
+
+class StudentProgressProfileSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    full_name = serializers.CharField()
+    email = serializers.EmailField()
+    admission_number = serializers.CharField(allow_null=True)
+    class_arm = serializers.CharField(allow_null=True)
+    class_arm_id = serializers.IntegerField(allow_null=True)
+    class_level = serializers.CharField(allow_null=True)
+    class_level_id = serializers.IntegerField(allow_null=True)
+    school = serializers.CharField(allow_null=True)
+    school_id = serializers.IntegerField(allow_null=True)
+
+
+class StudentProgressSummarySerializer(serializers.Serializer):
+    assignment_average = serializers.FloatField()
+    practice_average = serializers.FloatField()
+    overall_average = serializers.FloatField()
+    graded_assignments_count = serializers.IntegerField()
+    missed_assignments_count = serializers.IntegerField()
+    practice_sessions_count = serializers.IntegerField()
+    weak_topic_count = serializers.IntegerField()
+    strong_topic_count = serializers.IntegerField()
+    risk_level = serializers.CharField()
+
+
+class StudentProgressAssignmentResultSerializer(serializers.Serializer):
+    submission_id = serializers.IntegerField()
+    assignment_id = serializers.IntegerField()
+    assignment_title = serializers.CharField()
+    teacher_name = serializers.CharField()
+    class_arm = serializers.CharField()
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    topic_id = serializers.IntegerField()
+    topic_title = serializers.CharField()
+    score = serializers.IntegerField()
+    total_marks = serializers.IntegerField()
+    percentage = serializers.FloatField()
+    submitted_at = serializers.DateTimeField(allow_null=True)
+    graded_at = serializers.DateTimeField(allow_null=True)
+
+
+class StudentProgressSubjectBreakdownSerializer(serializers.Serializer):
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    average_percentage = serializers.FloatField()
+    graded_assignments_count = serializers.IntegerField(required=False)
+    sessions_completed = serializers.IntegerField(required=False)
+    questions_answered = serializers.IntegerField(required=False)
+    correct_answers = serializers.IntegerField(required=False)
+    last_graded_at = serializers.DateTimeField(allow_null=True, required=False)
+    last_practiced_at = serializers.DateTimeField(allow_null=True, required=False)
+
+
+class StudentProgressTopicBreakdownSerializer(StudentProgressSubjectBreakdownSerializer):
+    topic_id = serializers.IntegerField()
+    topic_title = serializers.CharField()
+
+
+class StudentProgressMissedAssignmentSerializer(serializers.Serializer):
+    assignment_id = serializers.IntegerField()
+    title = serializers.CharField()
+    subject = serializers.CharField()
+    topic = serializers.CharField()
+    due_at = serializers.DateTimeField(allow_null=True)
+
+
+class StudentProgressPracticeSessionSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    topic_id = serializers.IntegerField(allow_null=True)
+    topic_title = serializers.CharField(allow_null=True)
+    class_level_id = serializers.IntegerField(allow_null=True)
+    class_level_name = serializers.CharField(allow_null=True)
+    difficulty = serializers.CharField()
+    question_count_requested = serializers.IntegerField()
+    score = serializers.IntegerField()
+    total_marks = serializers.IntegerField()
+    percentage = serializers.FloatField()
+    submitted_at = serializers.DateTimeField(allow_null=True)
+
+
+class StudentProgressTopicSerializer(serializers.Serializer):
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    topic_id = serializers.IntegerField()
+    topic_title = serializers.CharField()
+    assignment_average = serializers.FloatField(allow_null=True)
+    practice_average = serializers.FloatField(allow_null=True)
+    assignment_count = serializers.IntegerField()
+    practice_sessions_count = serializers.IntegerField()
+    average_percentage = serializers.FloatField()
+    evidence_count = serializers.IntegerField()
+
+
+class StudentProgressRecommendationSerializer(serializers.Serializer):
+    recommended_action = serializers.CharField()
+    subject_id = serializers.IntegerField(allow_null=True)
+    subject_name = serializers.CharField(allow_blank=True)
+    topic_id = serializers.IntegerField(allow_null=True)
+    topic_title = serializers.CharField(allow_blank=True)
+    reason = serializers.CharField()
+    action_payload = serializers.DictField()
+
+
+class StudentProgressAssignmentPerformanceSerializer(serializers.Serializer):
+    recent_results = StudentProgressAssignmentResultSerializer(many=True)
+    subject_breakdown = StudentProgressSubjectBreakdownSerializer(many=True)
+    topic_breakdown = StudentProgressTopicBreakdownSerializer(many=True)
+    missed_assignments = StudentProgressMissedAssignmentSerializer(many=True)
+
+
+class StudentProgressPracticePerformanceSerializer(serializers.Serializer):
+    recent_sessions = StudentProgressPracticeSessionSerializer(many=True)
+    subject_breakdown = StudentProgressSubjectBreakdownSerializer(many=True)
+    topic_breakdown = StudentProgressTopicBreakdownSerializer(many=True)
+
+
+class StudentProgressLearningPathSummarySerializer(serializers.Serializer):
+    overall_status = serializers.CharField()
+    headline = serializers.CharField()
+    message = serializers.CharField()
+    recommended_next_action = serializers.DictField(allow_null=True)
+
+
+class StudentProgressReportSerializer(serializers.Serializer):
+    student = StudentProgressProfileSerializer()
+    summary = StudentProgressSummarySerializer()
+    assignment_performance = StudentProgressAssignmentPerformanceSerializer()
+    practice_performance = StudentProgressPracticePerformanceSerializer()
+    weak_topics = StudentProgressTopicSerializer(many=True)
+    strong_topics = StudentProgressTopicSerializer(many=True)
+    recommendations = StudentProgressRecommendationSerializer(many=True)
+    learning_path_summary = StudentProgressLearningPathSummarySerializer()
+    generated_at = serializers.DateTimeField()

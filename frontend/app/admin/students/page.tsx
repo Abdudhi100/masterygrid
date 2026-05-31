@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
+
 import { BooleanBadge } from "@/components/admin/BooleanBadge";
 import { ResourcePage } from "@/components/admin/ResourcePage";
 import type { FormState } from "@/components/admin/ResourceForm";
+import { Button } from "@/components/ui/Button";
 import { getStudents, registerStudent } from "@/lib/academics";
 import { stringValue } from "@/lib/formPayload";
 import { useAuth } from "@/hooks/useAuth";
@@ -77,6 +80,18 @@ export default function StudentsPage() {
           key: "is_active",
           header: "Status",
           render: (row) => <BooleanBadge value={row.is_active} />
+        },
+        {
+          key: "progress_report",
+          header: "Progress",
+          render: (row) => (
+            <Link
+              href={`/admin/students/${row.id}/progress-report`}
+              data-testid="student-progress-link"
+            >
+              <Button variant="secondary">Progress Report</Button>
+            </Link>
+          )
         }
       ]}
     />

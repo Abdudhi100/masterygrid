@@ -124,9 +124,16 @@ export default function TeacherStudentPerformancePage({
           performance.student.admission_number ?? "Admission number not set"
         }`}
         actions={
-          <Link href="/teacher/weak-students">
-            <Button variant="secondary">Back to Weak Students</Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/teacher/students/${params.id}/progress-report`}>
+              <Button variant="secondary" data-testid="student-progress-link">
+                Progress Report
+              </Button>
+            </Link>
+            <Link href="/teacher/weak-students">
+              <Button variant="secondary">Back to Weak Students</Button>
+            </Link>
+          </div>
         }
       />
 

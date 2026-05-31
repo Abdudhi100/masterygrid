@@ -339,3 +339,26 @@ class SchoolAdminAnalyticsTests(TestCase):
 
         self.assertEqual(teacher_response.status_code, 403)
         self.assertEqual(student_response.status_code, 403)
+
+    def test_school_admin_can_view_own_student_progress_report(self):
+        assignment = self.create_published_assignment(question_count=2)
+        self.submit_for_student(assignment, self.student, correct_count=1)
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get(
+            f"/api/analytics/students/{self.student.id}/progress-report/",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["student"]["id"], self.student.id)
+        self.assertEqual(response.data["student"]["school_id"], self.school.id)
+        self.assertEqual(response.data["summary"]["graded_assignments_count"], 1)
+
+    def test_school_admin_cannot_view_other_school_student_progress_report(self):
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get(
+            f"/api/analytics/students/{self.other_student.id}/progress-report/",
+        )
+
+        self.assertEqual(response.status_code, 404)

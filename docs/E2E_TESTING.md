@@ -161,7 +161,7 @@ tests to create data against a production-like target.
 The E2E workflow can run in two modes:
 
 - `smoke`: runs only `01-auth-smoke.spec.ts`.
-- `full`: runs `01`, `02`, `03`, `04`, `05`, `06`, `07`, `08`, and `09`, including
+- `full`: runs `01`, `02`, `03`, `04`, `05`, `06`, `07`, `08`, `09`, `10`, and `11`, including
   seeded/mutating tests.
 
 Pushes to `main` run smoke E2E only when the required secrets exist. If secrets
@@ -386,6 +386,12 @@ Additional seeded workflow suites:
   assignment, school admin opens the intervention dashboard, sees class,
   subject, teacher, and weak-cluster recommendations, and follows an analytics
   action link.
+- `10-student-progress-report.spec.ts`: student completes assignment and
+  practice work, then school admin and teacher open the internal progress report
+  with assignment, practice, weak-topic, and recommendation sections.
+- `11-student-progress-print.spec.ts`: school admin and teacher open the
+  printable progress report view, verify print/export controls, and confirm the
+  report can navigate back to the normal view.
 
 ## Login Debugging
 

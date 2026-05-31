@@ -200,11 +200,19 @@ export default function TeacherWeakStudentsPage() {
                   key: "action",
                   header: "Action",
                   render: (row) => (
-                    <Link
-                      href={`/teacher/students/${row.student_id}/performance`}
-                    >
-                      <Button variant="secondary">View Performance</Button>
-                    </Link>
+                    <div className="flex min-w-[15rem] flex-wrap gap-2">
+                      <Link
+                        href={`/teacher/students/${row.student_id}/performance`}
+                      >
+                        <Button variant="secondary">Performance</Button>
+                      </Link>
+                      <Link
+                        href={`/teacher/students/${row.student_id}/progress-report`}
+                        data-testid="student-progress-link"
+                      >
+                        <Button variant="secondary">Progress Report</Button>
+                      </Link>
+                    </div>
                   )
                 }
               ]}

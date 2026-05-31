@@ -10,6 +10,7 @@ import type {
   TeacherAssignmentResults,
   TeacherOverview,
   TeacherRemediationPlan,
+  StudentProgressReport,
   TeacherStudentPerformance,
   TeacherWeakStudent,
   TeacherWeakTopic
@@ -60,4 +61,9 @@ export const getTeacherRemediationPlan = () =>
 export const getTeacherStudentPerformance = (studentId: number | string) =>
   api.get<TeacherStudentPerformance>(
     `/analytics/teacher/students/${studentId}/performance/`
+  );
+
+export const getStudentProgressReport = (studentId: number | string) =>
+  api.get<StudentProgressReport>(
+    `/analytics/students/${studentId}/progress-report/`
   );

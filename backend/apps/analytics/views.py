@@ -1,4 +1,5 @@
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.analytics.permissions import (
@@ -8,6 +9,7 @@ from apps.analytics.permissions import (
 )
 from apps.analytics.serializers import (
     AdminInterventionDashboardSerializer,
+    StudentProgressReportSerializer,
     TeacherRemediationPlanSerializer,
 )
 from apps.analytics.services import (
@@ -20,6 +22,7 @@ from apps.analytics.services import (
     get_admin_weak_students,
     get_assignment_results,
     get_student_performance_for_teacher,
+    get_student_progress_report,
     get_teacher_remediation_plan,
     get_teacher_overview,
     get_teacher_weak_students,
@@ -149,6 +152,20 @@ class AdminInterventionDashboardAPIView(APIView):
         serializer = AdminInterventionDashboardSerializer(
             get_admin_intervention_dashboard(
                 request.user,
+                school_id=requested_school_id(request),
+            )
+        )
+        return Response(serializer.data)
+
+
+class StudentProgressReportAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, student_id):
+        serializer = StudentProgressReportSerializer(
+            get_student_progress_report(
+                request.user,
+                student_id,
                 school_id=requested_school_id(request),
             )
         )

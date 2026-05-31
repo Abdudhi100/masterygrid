@@ -16,6 +16,7 @@ from apps.academics.models import (
 from apps.accounts.models import User
 from apps.assignments.services import create_assignment_from_topic, publish_assignment
 from apps.common.choices import QuestionStatus, UserRole
+from apps.practice.models import PracticeSession, PracticeSessionStatus
 from apps.question_bank.models import Question, QuestionOption
 from apps.schools.models import School
 from apps.submissions.models import Submission
@@ -161,6 +162,23 @@ class TeacherAnalyticsTests(TestCase):
                 }
             )
         return submit_assignment(submission, answers)
+
+    def create_submitted_practice_session(self, student, score=4, total_marks=5):
+        return PracticeSession.objects.create(
+            school=student.school,
+            student=student,
+            subject=self.subject,
+            topic=self.topic,
+            class_level=self.class_level,
+            class_arm=self.class_arm,
+            difficulty="mixed",
+            question_count_requested=total_marks,
+            status=PracticeSessionStatus.SUBMITTED,
+            score=score,
+            total_marks=total_marks,
+            percentage=round(score / total_marks * 100, 2),
+            submitted_at=timezone.now(),
+        )
 
     def test_teacher_sees_overview_for_own_assignments(self):
         assignment = self.create_published_assignment(question_count=2)
@@ -312,3 +330,48 @@ class TeacherAnalyticsTests(TestCase):
 
         self.assertEqual(student_response.status_code, 403)
         self.assertEqual(admin_response.status_code, 403)
+
+    def test_teacher_can_view_student_progress_report(self):
+        assignment = self.create_published_assignment(question_count=2)
+        self.submit_for_student(assignment, self.student, correct_count=0)
+        self.create_submitted_practice_session(self.student)
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.get(
+            f"/api/analytics/students/{self.student.id}/progress-report/",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["student"]["id"], self.student.id)
+        self.assertEqual(response.data["student"]["class_arm"], str(self.class_arm))
+        self.assertEqual(response.data["summary"]["graded_assignments_count"], 1)
+        self.assertEqual(response.data["summary"]["practice_sessions_count"], 1)
+        self.assertEqual(response.data["summary"]["weak_topic_count"], 1)
+        self.assertTrue(response.data["assignment_performance"]["recent_results"])
+        self.assertTrue(response.data["practice_performance"]["recent_sessions"])
+        self.assertTrue(response.data["recommendations"])
+
+    def test_teacher_without_student_scope_cannot_view_progress_report(self):
+        unrelated_teacher = User.objects.create_user(
+            email="unrelated@example.com",
+            password="StrongPass123",
+            full_name="Unrelated Teacher",
+            role=UserRole.TEACHER,
+            school=self.school,
+        )
+        self.client.force_authenticate(unrelated_teacher)
+
+        response = self.client.get(
+            f"/api/analytics/students/{self.student.id}/progress-report/",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_student_cannot_view_progress_report(self):
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get(
+            f"/api/analytics/students/{self.student.id}/progress-report/",
+        )
+
+        self.assertEqual(response.status_code, 403)
