@@ -3,6 +3,7 @@ from django.urls import path
 from apps.analytics.views import (
     AdminAssignmentComplianceAPIView,
     AdminClassPerformanceAPIView,
+    AdminInterventionDashboardAPIView,
     AdminOverviewAPIView,
     AdminSubjectPerformanceAPIView,
     AdminTeacherActivityAPIView,
@@ -43,6 +44,11 @@ urlpatterns = [
         "admin/assignment-compliance/",
         AdminAssignmentComplianceAPIView.as_view(),
         name="admin-assignment-compliance",
+    ),
+    path(
+        "admin/intervention-dashboard/",
+        AdminInterventionDashboardAPIView.as_view(),
+        name="admin-intervention-dashboard",
     ),
     path("teacher/overview/", TeacherOverviewAPIView.as_view(), name="teacher-overview"),
     path(

@@ -6,10 +6,14 @@ from apps.analytics.permissions import (
     IsTeacherAnalyticsUser,
     IsTeacherOnlyAnalyticsUser,
 )
-from apps.analytics.serializers import TeacherRemediationPlanSerializer
+from apps.analytics.serializers import (
+    AdminInterventionDashboardSerializer,
+    TeacherRemediationPlanSerializer,
+)
 from apps.analytics.services import (
     get_admin_assignment_compliance,
     get_admin_class_performance,
+    get_admin_intervention_dashboard,
     get_admin_overview,
     get_admin_subject_performance,
     get_admin_teacher_activity,
@@ -136,3 +140,16 @@ class AdminAssignmentComplianceAPIView(APIView):
                 school_id=requested_school_id(request),
             )
         )
+
+
+class AdminInterventionDashboardAPIView(APIView):
+    permission_classes = [IsSchoolAdminAnalyticsUser]
+
+    def get(self, request):
+        serializer = AdminInterventionDashboardSerializer(
+            get_admin_intervention_dashboard(
+                request.user,
+                school_id=requested_school_id(request),
+            )
+        )
+        return Response(serializer.data)

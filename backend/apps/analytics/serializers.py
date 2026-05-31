@@ -210,3 +210,115 @@ class AdminAssignmentComplianceSerializer(serializers.Serializer):
     not_started_count = serializers.IntegerField()
     submission_rate = serializers.FloatField()
     compliance_status = serializers.CharField()
+
+
+class AdminInterventionActionPayloadSerializer(serializers.Serializer):
+    label = serializers.CharField()
+    href = serializers.CharField()
+    params = serializers.DictField()
+
+
+class AdminInterventionSummarySerializer(serializers.Serializer):
+    total_classes_at_risk = serializers.IntegerField()
+    total_subjects_at_risk = serializers.IntegerField()
+    total_teachers_at_risk = serializers.IntegerField()
+    total_weak_student_clusters = serializers.IntegerField()
+    total_compliance_alerts = serializers.IntegerField()
+    total_urgent_interventions = serializers.IntegerField()
+    average_school_percentage = serializers.FloatField()
+    overall_risk_level = serializers.CharField()
+    message = serializers.CharField()
+
+
+class AdminUrgentInterventionSerializer(serializers.Serializer):
+    category = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+    risk_level = serializers.CharField()
+    recommended_action = serializers.CharField()
+    action_payload = AdminInterventionActionPayloadSerializer()
+
+
+class AdminClassInterventionSerializer(serializers.Serializer):
+    class_arm_id = serializers.IntegerField()
+    class_arm_name = serializers.CharField()
+    class_level = serializers.CharField()
+    average_score = serializers.FloatField()
+    submitted_count = serializers.IntegerField()
+    weak_student_count = serializers.IntegerField()
+    risk_level = serializers.CharField()
+    main_weak_subjects = serializers.ListField()
+    main_weak_topics = serializers.ListField()
+    recommended_action = serializers.CharField()
+    action_payload = AdminInterventionActionPayloadSerializer()
+
+
+class AdminSubjectInterventionSerializer(serializers.Serializer):
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    average_score = serializers.FloatField()
+    weak_class_count = serializers.IntegerField()
+    weak_student_count = serializers.IntegerField()
+    affected_class_arms = serializers.ListField(child=serializers.CharField())
+    risk_level = serializers.CharField()
+    weakest_topics = serializers.ListField()
+    recommended_action = serializers.CharField()
+    action_payload = AdminInterventionActionPayloadSerializer()
+
+
+class AdminTeacherInterventionSerializer(serializers.Serializer):
+    teacher_id = serializers.IntegerField()
+    teacher_name = serializers.CharField()
+    teacher_email = serializers.EmailField(allow_blank=True)
+    staff_id = serializers.CharField(allow_null=True)
+    classes_subjects_taught = serializers.ListField()
+    assignment_count = serializers.IntegerField()
+    published_assignment_count = serializers.IntegerField()
+    average_class_score = serializers.FloatField()
+    submission_rate = serializers.FloatField()
+    submitted_count = serializers.IntegerField()
+    expected_submission_count = serializers.IntegerField()
+    risk_level = serializers.CharField()
+    recommended_action = serializers.CharField()
+    action_payload = AdminInterventionActionPayloadSerializer()
+
+
+class AdminWeakStudentClusterSerializer(serializers.Serializer):
+    class_arm = serializers.CharField()
+    subject = serializers.CharField()
+    topic = serializers.CharField()
+    weak_student_count = serializers.IntegerField()
+    average_score = serializers.FloatField()
+    risk_level = serializers.CharField()
+    recommended_action = serializers.CharField()
+    action_payload = AdminInterventionActionPayloadSerializer()
+
+
+class AdminAssignmentComplianceAlertSerializer(serializers.Serializer):
+    assignment_id = serializers.IntegerField()
+    title = serializers.CharField()
+    teacher_name = serializers.CharField()
+    class_arm = serializers.CharField()
+    subject = serializers.CharField()
+    topic = serializers.CharField()
+    expected_students = serializers.IntegerField()
+    started_count = serializers.IntegerField()
+    submitted_count = serializers.IntegerField()
+    not_started_count = serializers.IntegerField()
+    submission_rate = serializers.FloatField()
+    risk_level = serializers.CharField()
+    recommended_action = serializers.CharField()
+    action_payload = AdminInterventionActionPayloadSerializer()
+
+
+class AdminInterventionDashboardSerializer(serializers.Serializer):
+    summary = AdminInterventionSummarySerializer()
+    risk_score = serializers.IntegerField()
+    overall_risk_level = serializers.CharField()
+    urgent_interventions = AdminUrgentInterventionSerializer(many=True)
+    class_interventions = AdminClassInterventionSerializer(many=True)
+    subject_interventions = AdminSubjectInterventionSerializer(many=True)
+    teacher_interventions = AdminTeacherInterventionSerializer(many=True)
+    weak_student_clusters = AdminWeakStudentClusterSerializer(many=True)
+    assignment_compliance_alerts = AdminAssignmentComplianceAlertSerializer(many=True)
+    recommended_actions = AdminUrgentInterventionSerializer(many=True)

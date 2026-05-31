@@ -280,3 +280,62 @@ class SchoolAdminAnalyticsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         student_ids = [item["student_id"] for item in response.data]
         self.assertIn(self.student.id, student_ids)
+
+    def test_school_admin_intervention_dashboard_detects_risks(self):
+        assignment = self.create_published_assignment(question_count=2)
+        self.submit_for_student(assignment, self.student, correct_count=0)
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get("/api/analytics/admin/intervention-dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(response.data["overall_risk_level"], ["moderate", "high", "critical"])
+        self.assertGreater(response.data["risk_score"], 0)
+        self.assertGreaterEqual(
+            response.data["summary"]["total_classes_at_risk"],
+            1,
+        )
+        self.assertGreaterEqual(
+            response.data["summary"]["total_subjects_at_risk"],
+            1,
+        )
+        self.assertGreaterEqual(
+            response.data["summary"]["total_weak_student_clusters"],
+            1,
+        )
+        self.assertTrue(response.data["urgent_interventions"])
+
+        class_card = response.data["class_interventions"][0]
+        self.assertEqual(class_card["class_arm_id"], self.class_arm.id)
+        self.assertEqual(class_card["action_payload"]["href"], "/admin/analytics/classes")
+
+        subject_card = response.data["subject_interventions"][0]
+        self.assertEqual(subject_card["subject_id"], self.subject.id)
+        self.assertEqual(
+            subject_card["action_payload"]["href"],
+            "/admin/analytics/subjects",
+        )
+
+    def test_admin_intervention_dashboard_has_safe_empty_state(self):
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get("/api/analytics/admin/intervention-dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["risk_score"], 0)
+        self.assertEqual(response.data["overall_risk_level"], "low")
+        self.assertEqual(response.data["urgent_interventions"], [])
+        self.assertEqual(response.data["class_interventions"], [])
+
+    def test_teacher_and_student_cannot_access_admin_intervention_dashboard(self):
+        self.client.force_authenticate(self.teacher)
+        teacher_response = self.client.get(
+            "/api/analytics/admin/intervention-dashboard/",
+        )
+        self.client.force_authenticate(self.student)
+        student_response = self.client.get(
+            "/api/analytics/admin/intervention-dashboard/",
+        )
+
+        self.assertEqual(teacher_response.status_code, 403)
+        self.assertEqual(student_response.status_code, 403)

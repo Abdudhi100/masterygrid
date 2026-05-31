@@ -126,6 +126,134 @@ export type AdminAssignmentCompliance = {
   compliance_status: string;
 };
 
+export type InterventionRiskLevel = "critical" | "high" | "moderate" | "low";
+
+export type AdminInterventionActionPayload = {
+  label: string;
+  href: string;
+  params: Record<string, string | number | boolean>;
+};
+
+export type AdminInterventionSummary = {
+  total_classes_at_risk: number;
+  total_subjects_at_risk: number;
+  total_teachers_at_risk: number;
+  total_weak_student_clusters: number;
+  total_compliance_alerts: number;
+  total_urgent_interventions: number;
+  average_school_percentage: number;
+  overall_risk_level: InterventionRiskLevel;
+  message: string;
+};
+
+export type AdminUrgentIntervention = {
+  category: string;
+  title: string;
+  description: string;
+  risk_level: InterventionRiskLevel;
+  recommended_action: string;
+  action_payload: AdminInterventionActionPayload;
+};
+
+export type AdminClassIntervention = {
+  class_arm_id: number;
+  class_arm_name: string;
+  class_level: string;
+  average_score: number;
+  submitted_count: number;
+  weak_student_count: number;
+  risk_level: InterventionRiskLevel;
+  main_weak_subjects: Array<{
+    subject: string;
+    average_percentage: number;
+    weak_student_count: number;
+  }>;
+  main_weak_topics: Array<{
+    subject: string;
+    topic: string;
+    average_percentage: number;
+    weak_student_count: number;
+  }>;
+  recommended_action: string;
+  action_payload: AdminInterventionActionPayload;
+};
+
+export type AdminSubjectIntervention = {
+  subject_id: number;
+  subject_name: string;
+  average_score: number;
+  weak_class_count: number;
+  weak_student_count: number;
+  affected_class_arms: string[];
+  risk_level: InterventionRiskLevel;
+  weakest_topics: AdminWeakestTopic[];
+  recommended_action: string;
+  action_payload: AdminInterventionActionPayload;
+};
+
+export type AdminTeacherIntervention = {
+  teacher_id: number;
+  teacher_name: string;
+  teacher_email: string;
+  staff_id: string | null;
+  classes_subjects_taught: Array<{
+    class_arm_id: number;
+    class_arm_name: string;
+    subject_id: number;
+    subject_name: string;
+  }>;
+  assignment_count: number;
+  published_assignment_count: number;
+  average_class_score: number;
+  submission_rate: number;
+  submitted_count: number;
+  expected_submission_count: number;
+  risk_level: InterventionRiskLevel;
+  recommended_action: string;
+  action_payload: AdminInterventionActionPayload;
+};
+
+export type AdminWeakStudentCluster = {
+  class_arm: string;
+  subject: string;
+  topic: string;
+  weak_student_count: number;
+  average_score: number;
+  risk_level: InterventionRiskLevel;
+  recommended_action: string;
+  action_payload: AdminInterventionActionPayload;
+};
+
+export type AdminAssignmentComplianceAlert = {
+  assignment_id: number;
+  title: string;
+  teacher_name: string;
+  class_arm: string;
+  subject: string;
+  topic: string;
+  expected_students: number;
+  started_count: number;
+  submitted_count: number;
+  not_started_count: number;
+  submission_rate: number;
+  risk_level: InterventionRiskLevel;
+  recommended_action: string;
+  action_payload: AdminInterventionActionPayload;
+};
+
+export type AdminInterventionDashboard = {
+  summary: AdminInterventionSummary;
+  risk_score: number;
+  overall_risk_level: InterventionRiskLevel;
+  urgent_interventions: AdminUrgentIntervention[];
+  class_interventions: AdminClassIntervention[];
+  subject_interventions: AdminSubjectIntervention[];
+  teacher_interventions: AdminTeacherIntervention[];
+  weak_student_clusters: AdminWeakStudentCluster[];
+  assignment_compliance_alerts: AdminAssignmentComplianceAlert[];
+  recommended_actions: AdminUrgentIntervention[];
+};
+
 export type TeacherRecentAssignment = {
   id: number;
   title: string;

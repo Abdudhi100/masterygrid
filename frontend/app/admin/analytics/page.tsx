@@ -21,6 +21,11 @@ import {
 
 const quickLinks = [
   {
+    title: "Interventions",
+    href: "/admin/interventions",
+    description: "Prioritize classes, subjects, teachers, and groups needing support."
+  },
+  {
     title: "Class Performance",
     href: "/admin/analytics/classes",
     description: "Compare performance and submission coverage by class."

@@ -30,6 +30,15 @@ from apps.submissions.models import Submission
 LOW_SCORE_THRESHOLD = 40
 WEAK_TOPIC_THRESHOLD = 50
 REMEDIATION_DEFAULT_LIMIT = 8
+ADMIN_INTERVENTION_LIMIT = 10
+
+
+RISK_LEVEL_WEIGHT = {
+    "critical": 3,
+    "high": 2,
+    "moderate": 1,
+    "low": 0,
+}
 
 
 def percentage_value(value):
@@ -1171,6 +1180,601 @@ def get_admin_assignment_compliance(user, school_id=None):
             item["due_at"],
         ),
     )
+
+
+def normalize_admin_intervention_risk(value):
+    if value in {"critical", "high", "moderate", "low"}:
+        return value
+    if value in {"poor", "inactive"}:
+        return "high"
+    if value in {"medium", "warning", "low_activity"}:
+        return "moderate"
+    if value in {"good", "active"}:
+        return "low"
+    return "low"
+
+
+def intervention_risk_from_average(average_score, *, has_evidence=True):
+    if not has_evidence:
+        return "low"
+    if average_score < 30:
+        return "critical"
+    if average_score < 40:
+        return "high"
+    if average_score < 50:
+        return "moderate"
+    return "low"
+
+
+def highest_intervention_risk(*levels):
+    return max(
+        (level for level in levels if level),
+        key=lambda level: RISK_LEVEL_WEIGHT.get(level, 0),
+        default="low",
+    )
+
+
+def action_payload(label, href, **params):
+    return {
+        "label": label,
+        "href": href,
+        "params": {
+            key: value
+            for key, value in params.items()
+            if value is not None and value != ""
+        },
+    }
+
+
+def risk_sort_key(item):
+    return (
+        -RISK_LEVEL_WEIGHT.get(item.get("risk_level", "low"), 0),
+        item.get("average_score", 100),
+        -item.get("weak_student_count", 0),
+        item.get("title", ""),
+    )
+
+
+def score_from_risks(items):
+    points = 0
+    for item in items:
+        risk = item.get("risk_level", "low")
+        if risk == "critical":
+            points += 25
+        elif risk == "high":
+            points += 15
+        elif risk == "moderate":
+            points += 7
+    return min(points, 100)
+
+
+def overall_intervention_risk_level(risk_score):
+    if risk_score >= 70:
+        return "critical"
+    if risk_score >= 40:
+        return "high"
+    if risk_score >= 15:
+        return "moderate"
+    return "low"
+
+
+def top_weak_subjects_for_class(weak_students, class_arm_name):
+    grouped = {}
+    for student in weak_students:
+        if student.get("class_arm") != class_arm_name:
+            continue
+        for subject in student.get("weak_subjects", []):
+            item = grouped.setdefault(
+                subject["subject"],
+                {
+                    "subject": subject["subject"],
+                    "scores": [],
+                    "student_ids": set(),
+                },
+            )
+            item["scores"].append(float(subject["average_percentage"]))
+            item["student_ids"].add(student["student_id"])
+
+    return [
+        {
+            "subject": item["subject"],
+            "average_percentage": round(sum(item["scores"]) / len(item["scores"]), 2),
+            "weak_student_count": len(item["student_ids"]),
+        }
+        for item in sorted(
+            grouped.values(),
+            key=lambda value: (
+                sum(value["scores"]) / len(value["scores"]),
+                -len(value["student_ids"]),
+            ),
+        )[:3]
+    ]
+
+
+def top_weak_topics_for_class(weak_students, class_arm_name):
+    grouped = {}
+    for student in weak_students:
+        if student.get("class_arm") != class_arm_name:
+            continue
+        for topic in student.get("weak_topics", []):
+            key = (topic.get("subject"), topic.get("topic"))
+            item = grouped.setdefault(
+                key,
+                {
+                    "subject": topic.get("subject"),
+                    "topic": topic.get("topic"),
+                    "scores": [],
+                    "student_ids": set(),
+                },
+            )
+            item["scores"].append(float(topic["average_percentage"]))
+            item["student_ids"].add(student["student_id"])
+
+    return [
+        {
+            "subject": item["subject"],
+            "topic": item["topic"],
+            "average_percentage": round(sum(item["scores"]) / len(item["scores"]), 2),
+            "weak_student_count": len(item["student_ids"]),
+        }
+        for item in sorted(
+            grouped.values(),
+            key=lambda value: (
+                sum(value["scores"]) / len(value["scores"]),
+                -len(value["student_ids"]),
+            ),
+        )[:3]
+    ]
+
+
+def build_class_interventions(class_rows, weak_students):
+    interventions = []
+    for row in class_rows:
+        if (
+            row["total_assignments"] == 0
+            and row["total_submissions"] == 0
+            and row["weak_student_count"] == 0
+        ):
+            continue
+
+        base_risk = normalize_admin_intervention_risk(row["risk_level"])
+        evidence_risk = intervention_risk_from_average(
+            row["average_percentage"],
+            has_evidence=row["total_submissions"] > 0,
+        )
+        risk_level = highest_intervention_risk(base_risk, evidence_risk)
+        if risk_level == "low" and row["weak_student_count"] == 0:
+            continue
+
+        class_arm_name = row["class_arm_name"]
+        interventions.append(
+            {
+                "class_arm_id": row["class_arm_id"],
+                "class_arm_name": class_arm_name,
+                "class_level": row["class_level"],
+                "average_score": row["average_percentage"],
+                "submitted_count": row["total_submissions"],
+                "weak_student_count": row["weak_student_count"],
+                "risk_level": risk_level,
+                "main_weak_subjects": top_weak_subjects_for_class(
+                    weak_students,
+                    class_arm_name,
+                ),
+                "main_weak_topics": top_weak_topics_for_class(
+                    weak_students,
+                    class_arm_name,
+                ),
+                "recommended_action": row["recommendation"],
+                "action_payload": action_payload(
+                    "View Class Analytics",
+                    "/admin/analytics/classes",
+                    class_arm=row["class_arm_id"],
+                ),
+            }
+        )
+
+    return sorted(interventions, key=risk_sort_key)[:ADMIN_INTERVENTION_LIMIT]
+
+
+def build_subject_interventions(subject_rows, weak_students):
+    interventions = []
+    for row in subject_rows:
+        weak_student_ids = set()
+        affected_class_arms = set()
+        for student in weak_students:
+            for subject in student.get("weak_subjects", []):
+                if subject.get("subject") != row["subject_name"]:
+                    continue
+                weak_student_ids.add(student["student_id"])
+                if student.get("class_arm"):
+                    affected_class_arms.add(student["class_arm"])
+
+        risk_level = highest_intervention_risk(
+            normalize_admin_intervention_risk(row["risk_level"]),
+            intervention_risk_from_average(
+                row["average_percentage"],
+                has_evidence=row["total_submissions"] > 0,
+            ),
+        )
+        if (
+            risk_level == "low"
+            and row["weak_topic_count"] == 0
+            and not weak_student_ids
+        ):
+            continue
+
+        interventions.append(
+            {
+                "subject_id": row["subject_id"],
+                "subject_name": row["subject_name"],
+                "average_score": row["average_percentage"],
+                "weak_class_count": len(affected_class_arms),
+                "weak_student_count": len(weak_student_ids),
+                "affected_class_arms": sorted(affected_class_arms),
+                "risk_level": risk_level,
+                "weakest_topics": row["weakest_topics"],
+                "recommended_action": row["recommendation"],
+                "action_payload": action_payload(
+                    "View Subject Analytics",
+                    "/admin/analytics/subjects",
+                    subject=row["subject_id"],
+                ),
+            }
+        )
+
+    return sorted(interventions, key=risk_sort_key)[:ADMIN_INTERVENTION_LIMIT]
+
+
+def teacher_email_map_for_school(school):
+    return {
+        teacher.id: teacher.email
+        for teacher in get_school_teachers(school)
+    }
+
+
+def teacher_scope_map_for_school(school):
+    scope = TeacherClassSubjectAssignment.objects.select_related(
+        "class_arm",
+        "class_arm__class_level",
+        "subject",
+    ).filter(is_active=True)
+    if school is not None:
+        scope = scope.filter(school=school)
+
+    mapped = defaultdict(list)
+    for assignment in scope:
+        mapped[assignment.teacher_id].append(
+            {
+                "class_arm_id": assignment.class_arm_id,
+                "class_arm_name": str(assignment.class_arm),
+                "subject_id": assignment.subject_id,
+                "subject_name": assignment.subject.name,
+            }
+        )
+    return mapped
+
+
+def build_teacher_interventions(teacher_rows, school):
+    emails = teacher_email_map_for_school(school)
+    scopes = teacher_scope_map_for_school(school)
+    school_assignments = get_school_assignments(school)
+    interventions = []
+
+    for row in teacher_rows:
+        teacher_assignments = school_assignments.filter(teacher_id=row["teacher_id"])
+        expected_total, submitted_total = get_expected_and_submitted_totals(
+            teacher_assignments,
+        )
+        submission_rate = calculate_rate(submitted_total, expected_total)
+        performance_risk = intervention_risk_from_average(
+            row["average_class_performance"],
+            has_evidence=row["total_student_submissions"] > 0,
+        )
+        compliance_risk = (
+            "high"
+            if expected_total and submission_rate < 50
+            else "moderate"
+            if expected_total and submission_rate < 70
+            else "low"
+        )
+        activity_risk = normalize_admin_intervention_risk(row["activity_status"])
+        risk_level = highest_intervention_risk(
+            activity_risk,
+            performance_risk,
+            compliance_risk,
+        )
+        if risk_level == "low":
+            continue
+
+        interventions.append(
+            {
+                "teacher_id": row["teacher_id"],
+                "teacher_name": row["teacher_name"],
+                "teacher_email": emails.get(row["teacher_id"], ""),
+                "staff_id": row["staff_id"],
+                "classes_subjects_taught": scopes.get(row["teacher_id"], []),
+                "assignment_count": row["assignments_created"],
+                "published_assignment_count": row["published_assignments"],
+                "average_class_score": row["average_class_performance"],
+                "submission_rate": submission_rate,
+                "submitted_count": submitted_total,
+                "expected_submission_count": expected_total,
+                "risk_level": risk_level,
+                "recommended_action": row["recommendation"],
+                "action_payload": action_payload(
+                    "View Teacher Activity",
+                    "/admin/analytics/teachers",
+                    teacher=row["teacher_id"],
+                ),
+            }
+        )
+
+    return sorted(interventions, key=risk_sort_key)[:ADMIN_INTERVENTION_LIMIT]
+
+
+def build_weak_student_clusters(weak_students):
+    grouped = {}
+    for student in weak_students:
+        for topic in student.get("weak_topics", []):
+            key = (
+                student.get("class_arm") or "Class not set",
+                topic.get("subject") or "Subject not set",
+                topic.get("topic") or "Topic not set",
+            )
+            item = grouped.setdefault(
+                key,
+                {
+                    "class_arm": key[0],
+                    "subject": key[1],
+                    "topic": key[2],
+                    "scores": [],
+                    "student_ids": set(),
+                },
+            )
+            item["scores"].append(float(topic["average_percentage"]))
+            item["student_ids"].add(student["student_id"])
+
+    clusters = []
+    for item in grouped.values():
+        average_score = round(sum(item["scores"]) / len(item["scores"]), 2)
+        weak_student_count = len(item["student_ids"])
+        risk_level = highest_intervention_risk(
+            intervention_risk_from_average(average_score),
+            "high" if weak_student_count >= 3 else "moderate",
+        )
+        clusters.append(
+            {
+                "class_arm": item["class_arm"],
+                "subject": item["subject"],
+                "topic": item["topic"],
+                "weak_student_count": weak_student_count,
+                "average_score": average_score,
+                "risk_level": risk_level,
+                "recommended_action": (
+                    "Ask the class teacher to reteach this topic and assign targeted "
+                    "follow-up questions."
+                ),
+                "action_payload": action_payload(
+                    "View Weak Students",
+                    "/admin/analytics/weak-students",
+                    class_arm=item["class_arm"],
+                    subject=item["subject"],
+                    topic=item["topic"],
+                ),
+            }
+        )
+
+    return sorted(clusters, key=risk_sort_key)[:ADMIN_INTERVENTION_LIMIT]
+
+
+def build_compliance_alerts(compliance_rows):
+    alerts = []
+    for row in compliance_rows:
+        if row["compliance_status"] == "good" and row["not_started_count"] == 0:
+            continue
+
+        risk_level = normalize_admin_intervention_risk(row["compliance_status"])
+        if row["submission_rate"] < 40 and row["expected_students"]:
+            risk_level = "critical"
+        elif row["submission_rate"] < 50 and row["expected_students"]:
+            risk_level = "high"
+
+        alerts.append(
+            {
+                "assignment_id": row["assignment_id"],
+                "title": row["title"],
+                "teacher_name": row["teacher_name"],
+                "class_arm": row["class_arm"],
+                "subject": row["subject"],
+                "topic": row["topic"],
+                "expected_students": row["expected_students"],
+                "started_count": row["started_count"],
+                "submitted_count": row["submitted_count"],
+                "not_started_count": row["not_started_count"],
+                "submission_rate": row["submission_rate"],
+                "risk_level": risk_level,
+                "recommended_action": (
+                    "Follow up on students who have not started and ask the teacher "
+                    "to send a reminder."
+                ),
+                "action_payload": action_payload(
+                    "View Compliance",
+                    "/admin/analytics/compliance",
+                    assignment=row["assignment_id"],
+                ),
+            }
+        )
+
+    return sorted(alerts, key=risk_sort_key)[:ADMIN_INTERVENTION_LIMIT]
+
+
+def build_urgent_interventions(
+    class_interventions,
+    subject_interventions,
+    teacher_interventions,
+    weak_student_clusters,
+    compliance_alerts,
+):
+    urgent = []
+    for item in class_interventions:
+        urgent.append(
+            {
+                "category": "class",
+                "title": item["class_arm_name"],
+                "description": (
+                    f"{item['class_arm_name']} averages {item['average_score']}% "
+                    f"with {item['weak_student_count']} weak students."
+                ),
+                "risk_level": item["risk_level"],
+                "recommended_action": item["recommended_action"],
+                "action_payload": item["action_payload"],
+            }
+        )
+    for item in subject_interventions:
+        urgent.append(
+            {
+                "category": "subject",
+                "title": item["subject_name"],
+                "description": (
+                    f"{item['subject_name']} averages {item['average_score']}% "
+                    f"with {item['weak_student_count']} weak students."
+                ),
+                "risk_level": item["risk_level"],
+                "recommended_action": item["recommended_action"],
+                "action_payload": item["action_payload"],
+            }
+        )
+    for item in teacher_interventions:
+        urgent.append(
+            {
+                "category": "teacher",
+                "title": item["teacher_name"],
+                "description": (
+                    f"{item['teacher_name']} has {item['assignment_count']} "
+                    "assignments and needs follow-up."
+                ),
+                "risk_level": item["risk_level"],
+                "recommended_action": item["recommended_action"],
+                "action_payload": item["action_payload"],
+            }
+        )
+    for item in weak_student_clusters:
+        urgent.append(
+            {
+                "category": "weak_student_cluster",
+                "title": f"{item['topic']} - {item['class_arm']}",
+                "description": (
+                    f"{item['weak_student_count']} students are weak in "
+                    f"{item['topic']}."
+                ),
+                "risk_level": item["risk_level"],
+                "recommended_action": item["recommended_action"],
+                "action_payload": item["action_payload"],
+            }
+        )
+    for item in compliance_alerts:
+        urgent.append(
+            {
+                "category": "assignment_compliance",
+                "title": item["title"],
+                "description": (
+                    f"{item['not_started_count']} of {item['expected_students']} "
+                    "students have not started."
+                ),
+                "risk_level": item["risk_level"],
+                "recommended_action": item["recommended_action"],
+                "action_payload": item["action_payload"],
+            }
+        )
+
+    return [
+        item
+        for item in sorted(urgent, key=risk_sort_key)
+        if item["risk_level"] != "low"
+    ][:ADMIN_INTERVENTION_LIMIT]
+
+
+def empty_admin_intervention_dashboard(overview):
+    return {
+        "summary": {
+            "total_classes_at_risk": 0,
+            "total_subjects_at_risk": 0,
+            "total_teachers_at_risk": 0,
+            "total_weak_student_clusters": 0,
+            "total_compliance_alerts": 0,
+            "total_urgent_interventions": 0,
+            "average_school_percentage": overview["average_school_percentage"],
+            "overall_risk_level": "low",
+            "message": "Publish assignments and collect submissions to unlock intervention insights.",
+        },
+        "risk_score": 0,
+        "overall_risk_level": "low",
+        "urgent_interventions": [],
+        "class_interventions": [],
+        "subject_interventions": [],
+        "teacher_interventions": [],
+        "weak_student_clusters": [],
+        "assignment_compliance_alerts": [],
+        "recommended_actions": [],
+    }
+
+
+def get_admin_intervention_dashboard(user, school_id=None):
+    school = get_school_for_admin(user, school_id)
+    overview = get_admin_overview(user, school_id=school_id)
+    if overview["total_assignments"] == 0:
+        return empty_admin_intervention_dashboard(overview)
+
+    class_rows = get_admin_class_performance(user, school_id=school_id)
+    subject_rows = get_admin_subject_performance(user, school_id=school_id)
+    teacher_rows = get_admin_teacher_activity(user, school_id=school_id)
+    weak_students = get_admin_weak_students(user, school_id=school_id)
+    compliance_rows = get_admin_assignment_compliance(user, school_id=school_id)
+
+    class_interventions = build_class_interventions(class_rows, weak_students)
+    subject_interventions = build_subject_interventions(subject_rows, weak_students)
+    teacher_interventions = build_teacher_interventions(teacher_rows, school)
+    weak_student_clusters = build_weak_student_clusters(weak_students)
+    assignment_compliance_alerts = build_compliance_alerts(compliance_rows)
+    urgent_interventions = build_urgent_interventions(
+        class_interventions,
+        subject_interventions,
+        teacher_interventions,
+        weak_student_clusters,
+        assignment_compliance_alerts,
+    )
+    risk_score = score_from_risks(urgent_interventions)
+    overall_risk_level = overall_intervention_risk_level(risk_score)
+
+    summary = {
+        "total_classes_at_risk": len(class_interventions),
+        "total_subjects_at_risk": len(subject_interventions),
+        "total_teachers_at_risk": len(teacher_interventions),
+        "total_weak_student_clusters": len(weak_student_clusters),
+        "total_compliance_alerts": len(assignment_compliance_alerts),
+        "total_urgent_interventions": len(urgent_interventions),
+        "average_school_percentage": overview["average_school_percentage"],
+        "overall_risk_level": overall_risk_level,
+        "message": (
+            "Urgent support areas found. Start with the highest-risk classes, "
+            "subjects, and weak student clusters."
+            if urgent_interventions
+            else "No urgent academic interventions are currently detected."
+        ),
+    }
+
+    return {
+        "summary": summary,
+        "risk_score": risk_score,
+        "overall_risk_level": overall_risk_level,
+        "urgent_interventions": urgent_interventions,
+        "class_interventions": class_interventions,
+        "subject_interventions": subject_interventions,
+        "teacher_interventions": teacher_interventions,
+        "weak_student_clusters": weak_student_clusters,
+        "assignment_compliance_alerts": assignment_compliance_alerts,
+        "recommended_actions": urgent_interventions[:5],
+    }
 
 
 def get_pending_or_not_started_count(assignments):
