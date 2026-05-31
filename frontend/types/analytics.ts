@@ -159,6 +159,66 @@ export type TeacherWeakTopic = {
   recommendation: string;
 };
 
+export type RemediationAffectedStudent = {
+  student_id: number;
+  student_name: string;
+  admission_number: string | null;
+  class_arm: string;
+  topic_id: number;
+  topic_title: string;
+  average_score: number;
+  attempted_count: number;
+};
+
+export type RemediationActionPayload = {
+  class_arm: number;
+  subject: number;
+  topic: number;
+  question_count: number;
+  title: string;
+  instructions: string;
+  remedial: boolean;
+};
+
+export type RemediationTopicCard = {
+  subject_id: number;
+  subject: string;
+  topic_id: number;
+  topic: string;
+  class_arm_id: number;
+  class_arm: string;
+  class_level_id: number;
+  class_level: string;
+  average_score: number;
+  attempted_count: number;
+  weak_student_count: number;
+  available_approved_questions: number;
+  recommended_question_count: number;
+  suggested_assignment_title: string;
+  suggested_instructions: string;
+  recommended_action: string;
+  priority: "high" | "medium" | "low";
+  latest_assignment_id: number;
+  latest_assignment_title: string;
+  latest_assignment_created_at: string;
+  affected_students: RemediationAffectedStudent[];
+  action_payload: RemediationActionPayload;
+};
+
+export type TeacherRemediationPlan = {
+  summary: {
+    total_weak_topics: number;
+    actionable_topic_count: number;
+    total_affected_students: number;
+    total_graded_submissions: number;
+    average_score: number;
+    message: string;
+  };
+  recommended_actions: RemediationTopicCard[];
+  weak_topic_cards: RemediationTopicCard[];
+  affected_students: RemediationAffectedStudent[];
+};
+
 export type TeacherOverview = {
   total_assignments_created: number;
   published_assignments: number;

@@ -161,7 +161,7 @@ tests to create data against a production-like target.
 The E2E workflow can run in two modes:
 
 - `smoke`: runs only `01-auth-smoke.spec.ts`.
-- `full`: runs `01`, `02`, `03`, `04`, `05`, and `06`, including
+- `full`: runs `01`, `02`, `03`, `04`, `05`, `06`, `07`, and `08`, including
   seeded/mutating tests.
 
 Pushes to `main` run smoke E2E only when the required secrets exist. If secrets
@@ -377,6 +377,11 @@ Additional seeded workflow suites:
 - `06-zip-diagram-import-flow.spec.ts`: admin validates/imports a synthetic ZIP
   with a generated PNG diagram, approves the question, and verifies the diagram
   appears in student practice attempt and result views.
+- `07-learning-path-flow.spec.ts`: student completes low-score practice, follows
+  the guided learning path into recommended practice, and reviews the result.
+- `08-teacher-remediation-flow.spec.ts`: student submits a low-score assignment,
+  teacher opens remediation recommendations, creates a remedial assignment, and
+  publishes it.
 
 ## Login Debugging
 

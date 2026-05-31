@@ -252,3 +252,63 @@ class TeacherAnalyticsTests(TestCase):
         response = self.client.get("/api/analytics/teacher/overview/")
 
         self.assertEqual(response.status_code, 403)
+
+    def test_teacher_remediation_plan_recommends_weak_topic_action(self):
+        assignment = self.create_published_assignment(question_count=2)
+        self.submit_for_student(assignment, self.student, correct_count=0)
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.get("/api/analytics/teacher/remediation-plan/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["summary"]["total_weak_topics"], 1)
+        self.assertEqual(response.data["summary"]["actionable_topic_count"], 1)
+        card = response.data["recommended_actions"][0]
+        self.assertEqual(card["topic_id"], self.topic.id)
+        self.assertEqual(card["class_arm_id"], self.class_arm.id)
+        self.assertEqual(card["subject_id"], self.subject.id)
+        self.assertEqual(card["average_score"], 0.0)
+        self.assertEqual(card["weak_student_count"], 1)
+        self.assertGreaterEqual(card["available_approved_questions"], 2)
+        self.assertEqual(card["action_payload"]["class_arm"], self.class_arm.id)
+        self.assertEqual(card["action_payload"]["subject"], self.subject.id)
+        self.assertEqual(card["action_payload"]["topic"], self.topic.id)
+        self.assertTrue(card["action_payload"]["remedial"])
+
+    def test_teacher_remediation_plan_handles_no_submissions(self):
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.get("/api/analytics/teacher/remediation-plan/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["summary"]["total_graded_submissions"], 0)
+        self.assertEqual(response.data["recommended_actions"], [])
+        self.assertIn("No graded submissions", response.data["summary"]["message"])
+
+    def test_teacher_remediation_plan_reports_no_approved_questions(self):
+        assignment = self.create_published_assignment(question_count=2)
+        self.submit_for_student(assignment, self.student, correct_count=0)
+        Question.objects.filter(topic=self.topic).update(is_active=False)
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.get("/api/analytics/teacher/remediation-plan/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["summary"]["total_weak_topics"], 1)
+        self.assertEqual(response.data["summary"]["actionable_topic_count"], 0)
+        self.assertEqual(response.data["recommended_actions"], [])
+        self.assertEqual(
+            response.data["weak_topic_cards"][0]["available_approved_questions"],
+            0,
+        )
+        self.assertIn("more approved questions", response.data["summary"]["message"])
+
+    def test_non_teacher_cannot_access_remediation_plan(self):
+        self.client.force_authenticate(self.student)
+        student_response = self.client.get("/api/analytics/teacher/remediation-plan/")
+
+        self.client.force_authenticate(self.other_school_admin)
+        admin_response = self.client.get("/api/analytics/teacher/remediation-plan/")
+
+        self.assertEqual(student_response.status_code, 403)
+        self.assertEqual(admin_response.status_code, 403)

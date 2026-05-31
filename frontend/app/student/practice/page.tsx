@@ -270,7 +270,7 @@ export default function StudentPracticePage() {
             <Link href="/student/practice/analytics">
               <Button variant="secondary">View Practice Analytics</Button>
             </Link>
-            <Link href="/student/practice/analytics#recommendations">
+            <Link href="/student/learning-path">
               <Button>View Recommendations</Button>
             </Link>
           </div>
@@ -371,7 +371,7 @@ export default function StudentPracticePage() {
                   Use your analytics recommendations to prefill the practice form.
                 </p>
               </div>
-              <Link href="/student/practice/analytics#recommendations">
+              <Link href="/student/learning-path">
                 <Button variant="secondary">View All</Button>
               </Link>
             </div>

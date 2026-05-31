@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from django.db.models import Avg, Q
+from django.db.models import Avg, Count, Q
 from django.shortcuts import get_object_or_404
 
 from apps.academics.models import StudentEnrollment, TeacherClassSubjectAssignment
@@ -22,11 +22,14 @@ from apps.analytics.selectors import (
     get_teacher_students,
 )
 from apps.common.choices import AssignmentStatus, SubmissionStatus
+from apps.common.choices import QuestionStatus
+from apps.question_bank.models import Question
 from apps.submissions.models import Submission
 
 
 LOW_SCORE_THRESHOLD = 40
 WEAK_TOPIC_THRESHOLD = 50
+REMEDIATION_DEFAULT_LIMIT = 8
 
 
 def percentage_value(value):
@@ -328,6 +331,275 @@ def get_teacher_weak_topics(teacher):
         )
 
     return sorted(weak_topics, key=lambda item: item["average_percentage"])
+
+
+def _approved_question_counts_for_teacher_remediation(teacher):
+    if not teacher or not teacher.school_id:
+        return {}
+
+    rows = (
+        Question.objects.filter(
+            Q(school__isnull=True) | Q(school=teacher.school),
+            status=QuestionStatus.APPROVED,
+            is_active=True,
+            topic__isnull=False,
+            class_level__isnull=False,
+        )
+        .values("subject_id", "topic_id", "class_level_id")
+        .annotate(available_approved_questions=Count("id"))
+    )
+    return {
+        (row["subject_id"], row["topic_id"], row["class_level_id"]): row[
+            "available_approved_questions"
+        ]
+        for row in rows
+    }
+
+
+def _recommended_remediation_question_count(available_count):
+    return max(1, min(10, available_count))
+
+
+def _remediation_priority(average_score, weak_student_count, available_count):
+    if average_score < LOW_SCORE_THRESHOLD or weak_student_count >= 3:
+        return "high" if available_count else "medium"
+    if average_score < WEAK_TOPIC_THRESHOLD or weak_student_count >= 1:
+        return "medium" if available_count else "low"
+    return "low"
+
+
+def _remediation_action_text(average_score, weak_student_count, available_count):
+    if not available_count:
+        return (
+            "Approve more question-bank questions for this topic before creating "
+            "a remedial assignment."
+        )
+    if average_score < LOW_SCORE_THRESHOLD:
+        return (
+            "Create a short remedial assignment and reteach the core method before "
+            "students attempt it."
+        )
+    if weak_student_count:
+        return (
+            "Create targeted follow-up practice for the students struggling with "
+            "this topic."
+        )
+    return "Create a brief revision assignment to strengthen this topic."
+
+
+def _remediation_sort_key(card):
+    latest_value = card["latest_assignment_created_at"]
+    latest_timestamp = latest_value.timestamp() if latest_value else 0
+    has_questions_rank = 0 if card["available_approved_questions"] > 0 else 1
+    return (
+        has_questions_rank,
+        card["average_score"],
+        -card["weak_student_count"],
+        -card["available_approved_questions"],
+        -latest_timestamp,
+    )
+
+
+def get_teacher_remediation_plan(teacher, limit=REMEDIATION_DEFAULT_LIMIT):
+    assignments = get_teacher_assignments(teacher).select_related(
+        "subject",
+        "topic",
+        "class_arm",
+        "class_arm__class_level",
+    )
+    availability = _approved_question_counts_for_teacher_remediation(teacher)
+    topic_groups = {}
+    total_graded_submissions = 0
+
+    for assignment in assignments:
+        submissions = list(
+            assignment.submissions.filter(graded_at__isnull=False).select_related(
+                "student",
+                "student__student_profile",
+            )
+        )
+        if not submissions:
+            continue
+
+        total_graded_submissions += len(submissions)
+        key = (assignment.subject_id, assignment.topic_id, assignment.class_arm_id)
+        item = topic_groups.setdefault(
+            key,
+            {
+                "subject_id": assignment.subject_id,
+                "subject_name": assignment.subject.name,
+                "topic_id": assignment.topic_id,
+                "topic_title": assignment.topic.title,
+                "class_arm_id": assignment.class_arm_id,
+                "class_arm_name": str(assignment.class_arm),
+                "class_level_id": assignment.class_arm.class_level_id,
+                "class_level_name": assignment.class_arm.class_level.name,
+                "percentages": [],
+                "student_percentages": defaultdict(list),
+                "students": {},
+                "latest_assignment_id": assignment.id,
+                "latest_assignment_title": assignment.title,
+                "latest_assignment_created_at": assignment.created_at,
+            },
+        )
+
+        if assignment.created_at > item["latest_assignment_created_at"]:
+            item["latest_assignment_id"] = assignment.id
+            item["latest_assignment_title"] = assignment.title
+            item["latest_assignment_created_at"] = assignment.created_at
+
+        for submission in submissions:
+            percentage = float(submission.percentage)
+            item["percentages"].append(percentage)
+            item["student_percentages"][submission.student_id].append(percentage)
+            item["students"][submission.student_id] = submission.student
+
+    weak_topic_cards = []
+    affected_students_by_id = {}
+    for item in topic_groups.values():
+        average_score = round(
+            sum(item["percentages"]) / len(item["percentages"]),
+            2,
+        )
+        affected_students = []
+        for student_id, scores in item["student_percentages"].items():
+            student_average = round(sum(scores) / len(scores), 2)
+            if student_average >= WEAK_TOPIC_THRESHOLD:
+                continue
+            student = item["students"][student_id]
+            affected_student = {
+                "student_id": student.id,
+                "student_name": student.full_name,
+                "admission_number": admission_number_for(student),
+                "class_arm": item["class_arm_name"],
+                "topic_id": item["topic_id"],
+                "topic_title": item["topic_title"],
+                "average_score": student_average,
+                "attempted_count": len(scores),
+            }
+            affected_students.append(affected_student)
+            existing_student = affected_students_by_id.get(student.id)
+            if (
+                existing_student is None
+                or student_average < existing_student["average_score"]
+            ):
+                affected_students_by_id[student.id] = affected_student
+
+        if average_score >= WEAK_TOPIC_THRESHOLD and not affected_students:
+            continue
+
+        available_count = availability.get(
+            (
+                item["subject_id"],
+                item["topic_id"],
+                item["class_level_id"],
+            ),
+            0,
+        )
+        recommended_question_count = (
+            _recommended_remediation_question_count(available_count)
+            if available_count
+            else 0
+        )
+        suggested_assignment_title = f"Remedial: {item['topic_title']}"
+        suggested_instructions = (
+            f"Review {item['topic_title']} carefully. This remedial assignment "
+            "focuses on common mistakes from recent class performance."
+        )
+        priority = _remediation_priority(
+            average_score,
+            len(affected_students),
+            available_count,
+        )
+        recommended_action = _remediation_action_text(
+            average_score,
+            len(affected_students),
+            available_count,
+        )
+
+        weak_topic_cards.append(
+            {
+                "subject_id": item["subject_id"],
+                "subject": item["subject_name"],
+                "topic_id": item["topic_id"],
+                "topic": item["topic_title"],
+                "class_arm_id": item["class_arm_id"],
+                "class_arm": item["class_arm_name"],
+                "class_level_id": item["class_level_id"],
+                "class_level": item["class_level_name"],
+                "average_score": average_score,
+                "attempted_count": len(item["percentages"]),
+                "weak_student_count": len(affected_students),
+                "available_approved_questions": available_count,
+                "recommended_question_count": recommended_question_count,
+                "suggested_assignment_title": suggested_assignment_title,
+                "suggested_instructions": suggested_instructions,
+                "recommended_action": recommended_action,
+                "priority": priority,
+                "latest_assignment_id": item["latest_assignment_id"],
+                "latest_assignment_title": item["latest_assignment_title"],
+                "latest_assignment_created_at": item["latest_assignment_created_at"],
+                "affected_students": sorted(
+                    affected_students,
+                    key=lambda student: (
+                        student["average_score"],
+                        student["student_name"],
+                    ),
+                ),
+                "action_payload": {
+                    "class_arm": item["class_arm_id"],
+                    "subject": item["subject_id"],
+                    "topic": item["topic_id"],
+                    "question_count": recommended_question_count,
+                    "title": suggested_assignment_title,
+                    "instructions": suggested_instructions,
+                    "remedial": True,
+                },
+            }
+        )
+
+    weak_topic_cards = sorted(weak_topic_cards, key=_remediation_sort_key)
+    recommended_actions = [
+        card
+        for card in weak_topic_cards
+        if card["available_approved_questions"] > 0
+    ][:limit]
+    limited_weak_topic_cards = weak_topic_cards[:limit]
+    average_score = (
+        round(
+            sum(card["average_score"] * card["attempted_count"] for card in weak_topic_cards)
+            / sum(card["attempted_count"] for card in weak_topic_cards),
+            2,
+        )
+        if weak_topic_cards
+        else 0.0
+    )
+
+    if not total_graded_submissions:
+        message = "No graded submissions yet. Remediation will appear after students submit assignments."
+    elif weak_topic_cards and not recommended_actions:
+        message = "Weak topics were found, but more approved questions are needed before creating remedial assignments."
+    elif not weak_topic_cards:
+        message = "No weak topics detected yet."
+    else:
+        message = "Create remedial assignments for the highest-priority weak topics."
+
+    return {
+        "summary": {
+            "total_weak_topics": len(weak_topic_cards),
+            "actionable_topic_count": len(recommended_actions),
+            "total_affected_students": len(affected_students_by_id),
+            "total_graded_submissions": total_graded_submissions,
+            "average_score": average_score,
+            "message": message,
+        },
+        "recommended_actions": recommended_actions,
+        "weak_topic_cards": limited_weak_topic_cards,
+        "affected_students": sorted(
+            affected_students_by_id.values(),
+            key=lambda student: (student["average_score"], student["student_name"]),
+        )[:20],
+    }
 
 
 def get_student_performance_for_teacher(teacher, student_id):

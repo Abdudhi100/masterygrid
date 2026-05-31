@@ -53,6 +53,14 @@ function AssignmentCreateForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const lessonLogId = searchParams.get("lessonLogId");
+  const prefillClassArm = searchParams.get("classArm") ?? searchParams.get("class_arm");
+  const prefillSubject = searchParams.get("subject");
+  const prefillTopic = searchParams.get("topic");
+  const prefillQuestionCount =
+    searchParams.get("questionCount") ?? searchParams.get("question_count");
+  const prefillTitle = searchParams.get("title");
+  const prefillInstructions = searchParams.get("instructions");
+  const isRemedial = searchParams.get("remedial") === "true";
 
   const [teacherAssignments, setTeacherAssignments] = useState<TeacherAssignment[]>([]);
   const [classArms, setClassArms] = useState<ClassArm[]>([]);
@@ -97,6 +105,25 @@ function AssignmentCreateForm() {
           setInstructions(
             lesson.notes ? `Based on lesson notes: ${notesPreview(lesson.notes)}` : ""
           );
+        } else {
+          if (prefillClassArm) {
+            setClassArm(prefillClassArm);
+          }
+          if (prefillSubject) {
+            setSubject(prefillSubject);
+          }
+          if (prefillTopic) {
+            setTopic(prefillTopic);
+          }
+          if (prefillQuestionCount) {
+            setQuestionCount(prefillQuestionCount);
+          }
+          if (prefillTitle) {
+            setTitle(prefillTitle);
+          }
+          if (prefillInstructions) {
+            setInstructions(prefillInstructions);
+          }
         }
       } catch (err) {
         setError(
@@ -110,7 +137,15 @@ function AssignmentCreateForm() {
     }
 
     void loadInitialData();
-  }, [lessonLogId]);
+  }, [
+    lessonLogId,
+    prefillClassArm,
+    prefillInstructions,
+    prefillQuestionCount,
+    prefillSubject,
+    prefillTitle,
+    prefillTopic
+  ]);
 
   const selectedClassArm = useMemo(
     () => classArms.find((item) => String(item.id) === classArm),
@@ -318,6 +353,23 @@ function AssignmentCreateForm() {
           </p>
           <p className="mt-3 text-sm leading-6 text-muted">
             {notesPreview(lessonLog.notes)}
+          </p>
+        </Card>
+      ) : null}
+
+      {isRemedial ? (
+        <Card className="mb-6 border-amber-100 bg-amber-50">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="warning" data-testid="assignment-remedial-badge">
+              Remedial assignment
+            </Badge>
+            <span className="text-sm font-semibold text-warning">
+              Prefilled from your remediation plan.
+            </span>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Review the fields, generate a draft from approved question-bank
+            questions, then publish when ready.
           </p>
         </Card>
       ) : null}

@@ -122,6 +122,9 @@ export default function StudentDashboardPage() {
             <Link href="/student/practice">
               <Button>Start Practice</Button>
             </Link>
+            <Link href="/student/learning-path">
+              <Button variant="secondary">Learning Path</Button>
+            </Link>
             <Link href="/student/practice/analytics">
               <Button variant="secondary">Practice Analytics</Button>
             </Link>
@@ -157,6 +160,9 @@ export default function StudentDashboardPage() {
             <Link href="/student/practice/analytics">
               <Button>Open Analytics</Button>
             </Link>
+            <Link href="/student/learning-path">
+              <Button variant="secondary">Learning Path</Button>
+            </Link>
             <Link href="/student/practice">
               <Button variant="secondary">Start Practice</Button>
             </Link>
@@ -174,7 +180,7 @@ export default function StudentDashboardPage() {
                 question-bank availability.
               </p>
             </div>
-            <Link href="/student/practice/analytics#recommendations">
+            <Link href="/student/learning-path">
               <Button variant="secondary">View All</Button>
             </Link>
           </div>

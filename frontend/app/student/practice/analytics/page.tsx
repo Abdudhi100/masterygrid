@@ -160,6 +160,9 @@ export default function StudentPracticeAnalyticsPage() {
             <Link href="/student/practice">
               <Button variant="secondary">Back to Practice</Button>
             </Link>
+            <Link href="/student/learning-path">
+              <Button variant="secondary">Learning Path</Button>
+            </Link>
             <Link href="/student/practice#start-practice">
               <Button>Start Practice</Button>
             </Link>

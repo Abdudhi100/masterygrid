@@ -9,6 +9,7 @@ from apps.analytics.views import (
     AdminWeakStudentsAPIView,
     TeacherAssignmentResultsAPIView,
     TeacherOverviewAPIView,
+    TeacherRemediationPlanAPIView,
     TeacherStudentPerformanceAPIView,
     TeacherWeakStudentsAPIView,
     TeacherWeakTopicsAPIView,
@@ -58,6 +59,11 @@ urlpatterns = [
         "teacher/weak-topics/",
         TeacherWeakTopicsAPIView.as_view(),
         name="teacher-weak-topics",
+    ),
+    path(
+        "teacher/remediation-plan/",
+        TeacherRemediationPlanAPIView.as_view(),
+        name="teacher-remediation-plan",
     ),
     path(
         "teacher/students/<int:student_id>/performance/",

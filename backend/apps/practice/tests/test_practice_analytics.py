@@ -328,3 +328,66 @@ class PracticeAnalyticsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["summary"]["total_sessions_completed"], 0)
+
+    def test_learning_path_prioritizes_weak_topics(self):
+        self.create_submitted_session(
+            topic=self.weak_topic,
+            correct_count=1,
+            total_questions=5,
+        )
+        self.create_submitted_session(
+            topic=self.average_topic,
+            correct_count=3,
+            total_questions=5,
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get("/api/practice/learning-path/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["overall_status"], "needs_attention")
+        self.assertEqual(
+            response.data["recommended_next_action"]["topic_id"],
+            self.weak_topic.id,
+        )
+        self.assertEqual(
+            response.data["recommended_next_action"]["category"],
+            "weak_topic",
+        )
+        self.assertEqual(
+            response.data["recommended_next_action"]["action_payload"]["subject"],
+            self.subject.id,
+        )
+        self.assertEqual(
+            response.data["recommended_next_action"]["action_payload"]["topic"],
+            self.weak_topic.id,
+        )
+        self.assertGreaterEqual(len(response.data["topic_cards"]), 2)
+
+    def test_learning_path_handles_no_history_with_available_questions(self):
+        self.create_question(self.unpracticed_topic, "Available motion question")
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get("/api/practice/learning-path/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["overall_status"], "getting_started")
+        self.assertEqual(
+            response.data["recommended_next_action"]["category"],
+            "new_topic",
+        )
+        self.assertEqual(response.data["summary"]["total_sessions_completed"], 0)
+        self.assertEqual(
+            response.data["recommended_next_action"]["available_question_count"],
+            1,
+        )
+
+    def test_learning_path_returns_empty_state_when_no_questions_exist(self):
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get("/api/practice/learning-path/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["overall_status"], "no_questions_available")
+        self.assertIsNone(response.data["recommended_next_action"])
+        self.assertEqual(response.data["topic_cards"], [])

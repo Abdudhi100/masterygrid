@@ -9,7 +9,8 @@ import type {
   PracticeStartPayload,
   PracticeSubjectPerformance,
   PracticeSummary,
-  PracticeTopicPerformance
+  PracticeTopicPerformance,
+  StudentLearningPath
 } from "@/types/practice";
 
 function unwrapList<T>(payload: T[] | ListResponse<T>) {
@@ -76,3 +77,6 @@ export const getPracticeRecommendations = () =>
 
 export const getPracticeAnalyticsDashboard = () =>
   api.get<PracticeAnalyticsDashboard>("/practice/analytics/dashboard/");
+
+export const getPracticeLearningPath = () =>
+  api.get<StudentLearningPath>("/practice/learning-path/");

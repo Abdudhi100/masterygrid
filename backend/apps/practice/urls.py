@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.practice.views import (
     PracticeAnalyticsDashboardAPIView,
+    PracticeLearningPathAPIView,
     PracticeRecommendationsAPIView,
     PracticeSessionViewSet,
     PracticeStrongTopicsAPIView,
@@ -52,6 +53,11 @@ urlpatterns = [
         "analytics/dashboard/",
         PracticeAnalyticsDashboardAPIView.as_view(),
         name="practice-analytics-dashboard",
+    ),
+    path(
+        "learning-path/",
+        PracticeLearningPathAPIView.as_view(),
+        name="practice-learning-path",
     ),
     *router.urls,
 ]

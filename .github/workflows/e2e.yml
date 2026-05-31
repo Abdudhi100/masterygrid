@@ -86,7 +86,7 @@ jobs:
           fi
 
           if [ "$run_full" = "true" ]; then
-            echo "specs=e2e/tests/01-auth-smoke.spec.ts e2e/tests/02-seeded-practice-setup.spec.ts e2e/tests/03-student-practice-flow.spec.ts e2e/tests/04-assignment-flow.spec.ts e2e/tests/05-question-import-flow.spec.ts e2e/tests/06-zip-diagram-import-flow.spec.ts" >> "$GITHUB_OUTPUT"
+            echo "specs=e2e/tests/01-auth-smoke.spec.ts e2e/tests/02-seeded-practice-setup.spec.ts e2e/tests/03-student-practice-flow.spec.ts e2e/tests/04-assignment-flow.spec.ts e2e/tests/05-question-import-flow.spec.ts e2e/tests/06-zip-diagram-import-flow.spec.ts e2e/tests/07-learning-path-flow.spec.ts e2e/tests/08-teacher-remediation-flow.spec.ts" >> "$GITHUB_OUTPUT"
             echo "Running full seeded E2E suite."
           else
             echo "specs=e2e/tests/01-auth-smoke.spec.ts" >> "$GITHUB_OUTPUT"

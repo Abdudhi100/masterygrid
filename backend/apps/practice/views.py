@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.practice.analytics import (
+    get_student_learning_path,
     get_student_practice_dashboard,
     get_student_practice_recommendations,
     get_student_practice_summary,
@@ -19,6 +20,7 @@ from apps.practice.permissions import (
 )
 from apps.practice.selectors import get_practice_sessions_for_user
 from apps.practice.serializers import (
+    LearningPathSerializer,
     PracticeAnalyticsDashboardSerializer,
     PracticeHistorySerializer,
     PracticeRecommendationSerializer,
@@ -157,4 +159,12 @@ class PracticeAnalyticsDashboardAPIView(APIView):
         serializer = PracticeAnalyticsDashboardSerializer(
             get_student_practice_dashboard(request.user)
         )
+        return Response(serializer.data)
+
+
+class PracticeLearningPathAPIView(APIView):
+    permission_classes = [PracticeAnalyticsPermission]
+
+    def get(self, request):
+        serializer = LearningPathSerializer(get_student_learning_path(request.user))
         return Response(serializer.data)

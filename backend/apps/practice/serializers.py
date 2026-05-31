@@ -384,6 +384,50 @@ class PracticeRecentSessionSerializer(serializers.Serializer):
     submitted_at = serializers.DateTimeField(allow_null=True)
 
 
+class LearningPathTopicPerformanceSummarySerializer(serializers.Serializer):
+    sessions_completed = serializers.IntegerField()
+    questions_answered = serializers.IntegerField()
+    correct_answers = serializers.IntegerField()
+    average_percentage = serializers.FloatField(allow_null=True)
+    strength_level = serializers.CharField()
+    last_practiced_at = serializers.DateTimeField(allow_null=True)
+
+
+class LearningPathActionPayloadSerializer(serializers.Serializer):
+    subject = serializers.IntegerField()
+    topic = serializers.IntegerField()
+    class_level = serializers.IntegerField(allow_null=True)
+    difficulty = serializers.CharField()
+    question_count = serializers.IntegerField()
+
+
+class LearningPathTopicCardSerializer(serializers.Serializer):
+    rank = serializers.IntegerField()
+    category = serializers.CharField()
+    priority = serializers.CharField()
+    reason = serializers.CharField()
+    subject_id = serializers.IntegerField()
+    subject_name = serializers.CharField()
+    topic_id = serializers.IntegerField()
+    topic_title = serializers.CharField()
+    class_level_id = serializers.IntegerField(allow_null=True)
+    class_level_name = serializers.CharField(allow_null=True)
+    difficulty = serializers.CharField()
+    recommended_question_count = serializers.IntegerField()
+    available_question_count = serializers.IntegerField()
+    performance = LearningPathTopicPerformanceSummarySerializer()
+    action_payload = LearningPathActionPayloadSerializer()
+
+
+class LearningPathSerializer(serializers.Serializer):
+    overall_status = serializers.CharField()
+    headline = serializers.CharField()
+    message = serializers.CharField()
+    recommended_next_action = LearningPathTopicCardSerializer(allow_null=True)
+    topic_cards = LearningPathTopicCardSerializer(many=True)
+    summary = PracticeSummarySerializer()
+
+
 class PracticeAnalyticsDashboardSerializer(serializers.Serializer):
     summary = PracticeSummarySerializer()
     subject_performance = PracticeSubjectPerformanceSerializer(many=True)

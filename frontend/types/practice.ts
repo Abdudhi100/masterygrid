@@ -158,3 +158,60 @@ export type PracticeAnalyticsDashboard = {
   recent_sessions: PracticeRecentSession[];
   message: string;
 };
+
+export type LearningPathStatus =
+  | "getting_started"
+  | "needs_attention"
+  | "building_consistency"
+  | "on_track"
+  | "no_questions_available";
+
+export type LearningPathCategory =
+  | "weak_topic"
+  | "needs_reinforcement"
+  | "new_topic"
+  | "challenge";
+
+export type LearningPathPerformanceSummary = {
+  sessions_completed: number;
+  questions_answered: number;
+  correct_answers: number;
+  average_percentage: number | null;
+  strength_level: PracticeTopicStrength | "new";
+  last_practiced_at: string | null;
+};
+
+export type LearningPathActionPayload = {
+  subject: number;
+  topic: number;
+  class_level: number | null;
+  difficulty: PracticeDifficulty;
+  question_count: number;
+};
+
+export type LearningPathTopicCard = {
+  rank: number;
+  category: LearningPathCategory;
+  priority: PracticeRecommendationPriority;
+  reason: string;
+  subject_id: number;
+  subject_name: string;
+  topic_id: number;
+  topic_title: string;
+  class_level_id: number | null;
+  class_level_name: string | null;
+  difficulty: PracticeDifficulty;
+  recommended_question_count: number;
+  available_question_count: number;
+  performance: LearningPathPerformanceSummary;
+  action_payload: LearningPathActionPayload;
+};
+
+export type StudentLearningPath = {
+  overall_status: LearningPathStatus;
+  headline: string;
+  message: string;
+  recommended_next_action: LearningPathTopicCard | null;
+  topic_cards: LearningPathTopicCard[];
+  summary: PracticeSummary;
+};

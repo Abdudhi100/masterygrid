@@ -57,6 +57,68 @@ class StudentPerformanceSerializer(serializers.Serializer):
     recommendation = serializers.CharField()
 
 
+class RemediationAffectedStudentSerializer(serializers.Serializer):
+    student_id = serializers.IntegerField()
+    student_name = serializers.CharField()
+    admission_number = serializers.CharField(allow_null=True)
+    class_arm = serializers.CharField()
+    topic_id = serializers.IntegerField()
+    topic_title = serializers.CharField()
+    average_score = serializers.FloatField()
+    attempted_count = serializers.IntegerField()
+
+
+class RemediationActionPayloadSerializer(serializers.Serializer):
+    class_arm = serializers.IntegerField()
+    subject = serializers.IntegerField()
+    topic = serializers.IntegerField()
+    question_count = serializers.IntegerField()
+    title = serializers.CharField()
+    instructions = serializers.CharField(allow_blank=True)
+    remedial = serializers.BooleanField()
+
+
+class RemediationTopicCardSerializer(serializers.Serializer):
+    subject_id = serializers.IntegerField()
+    subject = serializers.CharField()
+    topic_id = serializers.IntegerField()
+    topic = serializers.CharField()
+    class_arm_id = serializers.IntegerField()
+    class_arm = serializers.CharField()
+    class_level_id = serializers.IntegerField()
+    class_level = serializers.CharField()
+    average_score = serializers.FloatField()
+    attempted_count = serializers.IntegerField()
+    weak_student_count = serializers.IntegerField()
+    available_approved_questions = serializers.IntegerField()
+    recommended_question_count = serializers.IntegerField()
+    suggested_assignment_title = serializers.CharField()
+    suggested_instructions = serializers.CharField()
+    recommended_action = serializers.CharField()
+    priority = serializers.CharField()
+    latest_assignment_id = serializers.IntegerField()
+    latest_assignment_title = serializers.CharField()
+    latest_assignment_created_at = serializers.DateTimeField()
+    affected_students = RemediationAffectedStudentSerializer(many=True)
+    action_payload = RemediationActionPayloadSerializer()
+
+
+class RemediationSummarySerializer(serializers.Serializer):
+    total_weak_topics = serializers.IntegerField()
+    actionable_topic_count = serializers.IntegerField()
+    total_affected_students = serializers.IntegerField()
+    total_graded_submissions = serializers.IntegerField()
+    average_score = serializers.FloatField()
+    message = serializers.CharField()
+
+
+class TeacherRemediationPlanSerializer(serializers.Serializer):
+    summary = RemediationSummarySerializer()
+    recommended_actions = RemediationTopicCardSerializer(many=True)
+    weak_topic_cards = RemediationTopicCardSerializer(many=True)
+    affected_students = RemediationAffectedStudentSerializer(many=True)
+
+
 class AdminOverviewSerializer(serializers.Serializer):
     total_students = serializers.IntegerField()
     total_teachers = serializers.IntegerField()

@@ -1,7 +1,12 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.analytics.permissions import IsSchoolAdminAnalyticsUser, IsTeacherAnalyticsUser
+from apps.analytics.permissions import (
+    IsSchoolAdminAnalyticsUser,
+    IsTeacherAnalyticsUser,
+    IsTeacherOnlyAnalyticsUser,
+)
+from apps.analytics.serializers import TeacherRemediationPlanSerializer
 from apps.analytics.services import (
     get_admin_assignment_compliance,
     get_admin_class_performance,
@@ -11,6 +16,7 @@ from apps.analytics.services import (
     get_admin_weak_students,
     get_assignment_results,
     get_student_performance_for_teacher,
+    get_teacher_remediation_plan,
     get_teacher_overview,
     get_teacher_weak_students,
     get_teacher_weak_topics,
@@ -54,6 +60,16 @@ class TeacherStudentPerformanceAPIView(APIView):
 
     def get(self, request, student_id):
         return Response(get_student_performance_for_teacher(request.user, student_id))
+
+
+class TeacherRemediationPlanAPIView(APIView):
+    permission_classes = [IsTeacherOnlyAnalyticsUser]
+
+    def get(self, request):
+        serializer = TeacherRemediationPlanSerializer(
+            get_teacher_remediation_plan(request.user)
+        )
+        return Response(serializer.data)
 
 
 class AdminOverviewAPIView(APIView):

@@ -8,6 +8,7 @@ import type {
   AdminWeakStudent,
   TeacherAssignmentResults,
   TeacherOverview,
+  TeacherRemediationPlan,
   TeacherStudentPerformance,
   TeacherWeakStudent,
   TeacherWeakTopic
@@ -46,6 +47,9 @@ export const getTeacherWeakStudents = () =>
 
 export const getTeacherWeakTopics = () =>
   api.get<TeacherWeakTopic[]>("/analytics/teacher/weak-topics/");
+
+export const getTeacherRemediationPlan = () =>
+  api.get<TeacherRemediationPlan>("/analytics/teacher/remediation-plan/");
 
 export const getTeacherStudentPerformance = (studentId: number | string) =>
   api.get<TeacherStudentPerformance>(

@@ -22,6 +22,7 @@ import {
 } from "./api";
 import {
   assertProductionAllowedForMutatingTests,
+  backendApiUrl,
   credentials
 } from "./env";
 
@@ -103,6 +104,28 @@ function requireSchoolId(admin: CurrentUser) {
   );
 }
 
+function adminSeedLoginError(error: unknown) {
+  const originalMessage = error instanceof Error ? error.message : String(error);
+  const passwordSet = process.env.E2E_ADMIN_PASSWORD ? "yes" : "no";
+
+  return new Error(
+    [
+      "E2E seed setup could not log in with the configured admin credentials.",
+      `E2E_BACKEND_API_URL: ${backendApiUrl}`,
+      `E2E_ADMIN_EMAIL: ${credentials.admin.email}`,
+      `E2E_ADMIN_PASSWORD set: ${passwordSet}`,
+      "Password value is intentionally not printed.",
+      "",
+      "If you are using local demo credentials, seed the backend first:",
+      "  cd backend",
+      "  .\\venv\\Scripts\\python.exe manage.py seed_demo_data --with-submissions",
+      "",
+      "Also confirm the frontend E2E env points at the backend/database that contains that admin account.",
+      `Original login error: ${originalMessage}`
+    ].join("\n")
+  );
+}
+
 export async function seedPracticeWorkflowData(
   request: APIRequestContext
 ): Promise<SeedPracticeWorkflowData> {
@@ -110,11 +133,16 @@ export async function seedPracticeWorkflowData(
 
   const runId = uniqueRunId();
   console.log(`[e2e] seed runId=${runId}`);
-  const tokenPair: TokenPair = await loginApi(
-    request,
-    credentials.admin.email,
-    credentials.admin.password
-  );
+  let tokenPair: TokenPair;
+  try {
+    tokenPair = await loginApi(
+      request,
+      credentials.admin.email,
+      credentials.admin.password
+    );
+  } catch (error) {
+    throw adminSeedLoginError(error);
+  }
   const adminToken = tokenPair.access;
   const admin = await apiGet<CurrentUser>(request, "auth/me/", adminToken);
   const schoolId = requireSchoolId(admin);

@@ -20,6 +20,17 @@ class IsTeacherAnalyticsUser(BasePermission):
         )
 
 
+class IsTeacherOnlyAnalyticsUser(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and getattr(user, "role", None) == UserRole.TEACHER
+            and getattr(user, "school_id", None)
+        )
+
+
 class IsSchoolAdminAnalyticsUser(BasePermission):
     def has_permission(self, request, view):
         user = request.user
