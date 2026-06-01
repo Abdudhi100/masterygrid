@@ -32,6 +32,7 @@ export const teacherNavItems: NavItem[] = [
   { label: "Assignments", href: "/teacher/assignments" },
   { label: "Results", href: "/teacher/results" },
   { label: "Remediation", href: "/teacher/remediation" },
+  { label: "Interventions", href: "/teacher/interventions" },
   { label: "Weak Students", href: "/teacher/weak-students" },
   { label: "Weak Topics", href: "/teacher/weak-topics" },
   { label: "Question Bank", href: "/teacher/question-bank" },

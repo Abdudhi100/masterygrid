@@ -244,7 +244,11 @@ def submit_assignment(submission, answers):
             "updated_at",
         ]
     )
-    return grade_submission(submission)
+    graded_submission = grade_submission(submission)
+    from apps.notifications.services import notify_assignment_submitted
+
+    notify_assignment_submitted(graded_submission)
+    return graded_submission
 
 
 def get_assignment_total_marks(assignment):

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Button } from "@/components/ui/Button";
 import { ROLE_LABELS } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
@@ -26,9 +27,12 @@ export function Topbar() {
             {user ? ROLE_LABELS[user.role] : "Loading profile"}
           </p>
         </div>
-        <Button variant="secondary" onClick={handleLogout}>
-          Sign out
-        </Button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <Button variant="secondary" onClick={handleLogout}>
+            Sign out
+          </Button>
+        </div>
       </div>
     </header>
   );

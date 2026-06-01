@@ -58,6 +58,7 @@ LOCAL_APPS = [
     "apps.notifications.apps.NotificationsConfig",
     "apps.ai_generation.apps.AiGenerationConfig",
     "apps.practice.apps.PracticeConfig",
+    "apps.interventions.apps.InterventionsConfig",
     "apps.common.apps.CommonConfig",
 ]
 

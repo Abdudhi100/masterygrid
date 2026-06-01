@@ -85,12 +85,17 @@ export default function StudentsPage() {
           key: "progress_report",
           header: "Progress",
           render: (row) => (
-            <Link
-              href={`/admin/students/${row.id}/progress-report`}
-              data-testid="student-progress-link"
-            >
-              <Button variant="secondary">Progress Report</Button>
-            </Link>
+            <div className="flex min-w-[16rem] flex-wrap gap-2">
+              <Link
+                href={`/admin/students/${row.id}/progress-report`}
+                data-testid="student-progress-link"
+              >
+                <Button variant="secondary">Progress Report</Button>
+              </Link>
+              <Link href={`/admin/students/${row.id}/interventions?create=1`}>
+                <Button variant="secondary">Create Intervention</Button>
+              </Link>
+            </div>
           )
         }
       ]}

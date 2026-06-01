@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { InterventionManagementPage } from "@/components/interventions/InterventionManagementPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -520,6 +521,8 @@ export default function AdminInterventionsPage() {
             <ComplianceCard key={item.assignment_id} item={item} />
           ))}
         </Section>
+
+        <InterventionManagementPage baseRole="admin" />
       </section>
     </div>
   );

@@ -212,6 +212,11 @@ export default function TeacherWeakStudentsPage() {
                       >
                         <Button variant="secondary">Progress Report</Button>
                       </Link>
+                      <Link
+                        href={`/teacher/students/${row.student_id}/interventions?create=1`}
+                      >
+                        <Button variant="secondary">Create Intervention</Button>
+                      </Link>
                     </div>
                   )
                 }

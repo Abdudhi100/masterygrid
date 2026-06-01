@@ -184,6 +184,15 @@ export function StudentProgressReport({
         description="Internal academic report for assignments, practice, weak topics, and next steps."
         actions={
           <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/${baseRole}/students/${studentId}/interventions?create=1`}
+              data-testid="intervention-create-button"
+            >
+              <Button>Create Intervention</Button>
+            </Link>
+            <Link href={`/${baseRole}/students/${studentId}/interventions`}>
+              <Button variant="secondary">View Interventions</Button>
+            </Link>
             <Link href={printHref} data-testid="student-progress-print-link">
               <Button variant="secondary">Print / Export</Button>
             </Link>

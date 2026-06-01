@@ -257,6 +257,9 @@ def publish_assignment(assignment, user):
     assignment.published_at = timezone.now()
     assignment.full_clean()
     assignment.save(update_fields=["status", "published_at", "updated_at"])
+    from apps.notifications.services import notify_assignment_published
+
+    notify_assignment_published(assignment, actor=user)
     return assignment
 
 
