@@ -9,6 +9,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.audit.services import record_audit_log
 from apps.common.choices import QuestionStatus, UserRole
 from apps.question_bank.filters import QuestionFilter
 from apps.question_bank.models import (
@@ -130,6 +131,15 @@ class QuestionViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         question = self.get_object()
         archived_question = archive_question(question, request.user)
+        record_audit_log(
+            actor=request.user,
+            action="question_archived",
+            category="question_bank",
+            obj=archived_question,
+            school=archived_question.school,
+            metadata={"via": "destroy"},
+            request=request,
+        )
         serializer = self.get_serializer(archived_question)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -168,6 +178,15 @@ class QuestionViewSet(viewsets.ModelViewSet):
     def approve(self, request, pk=None):
         question = self.get_object()
         approved_question = approve_question(question, request.user)
+        record_audit_log(
+            actor=request.user,
+            action="question_approved",
+            category="question_bank",
+            obj=approved_question,
+            school=approved_question.school,
+            metadata={"status": approved_question.status},
+            request=request,
+        )
         serializer = QuestionSerializer(approved_question, context=self.get_serializer_context())
         return Response(serializer.data)
 
@@ -175,6 +194,15 @@ class QuestionViewSet(viewsets.ModelViewSet):
     def reject(self, request, pk=None):
         question = self.get_object()
         rejected_question = reject_question(question, request.user)
+        record_audit_log(
+            actor=request.user,
+            action="question_rejected",
+            category="question_bank",
+            obj=rejected_question,
+            school=rejected_question.school,
+            metadata={"status": rejected_question.status},
+            request=request,
+        )
         serializer = QuestionSerializer(rejected_question, context=self.get_serializer_context())
         return Response(serializer.data)
 
@@ -182,6 +210,15 @@ class QuestionViewSet(viewsets.ModelViewSet):
     def archive(self, request, pk=None):
         question = self.get_object()
         archived_question = archive_question(question, request.user)
+        record_audit_log(
+            actor=request.user,
+            action="question_archived",
+            category="question_bank",
+            obj=archived_question,
+            school=archived_question.school,
+            metadata={"status": archived_question.status},
+            request=request,
+        )
         serializer = QuestionSerializer(archived_question, context=self.get_serializer_context())
         return Response(serializer.data)
 
@@ -300,6 +337,15 @@ class QuestionViewSet(viewsets.ModelViewSet):
                 else:
                     updated_question = archive_question(question, request.user)
 
+                record_audit_log(
+                    actor=request.user,
+                    action=f"question_{action_past_tense}",
+                    category="question_bank",
+                    obj=updated_question,
+                    school=updated_question.school,
+                    metadata={"bulk_action": True, "status": updated_question.status},
+                    request=request,
+                )
                 results.append(
                     {
                         "id": question_id,
@@ -389,6 +435,24 @@ class QuestionImportBatchViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         batch = serializer.save()
         batch = process_question_import_batch(batch)
+        record_audit_log(
+            actor=request.user,
+            action="question_import_completed",
+            category="import",
+            obj=batch,
+            school=batch.school,
+            metadata={
+                "import_domain": "question_bank",
+                "file_type": batch.file_type,
+                "total_rows": batch.total_rows,
+                "successful_rows": batch.successful_rows,
+                "failed_rows": batch.failed_rows,
+                "duplicate_rows": batch.duplicate_rows,
+                "warning_rows": getattr(batch, "warning_rows", 0),
+                "status": batch.status,
+            },
+            request=request,
+        )
         output_serializer = QuestionImportBatchSerializer(
             batch,
             context=self.get_serializer_context(),

@@ -30,6 +30,7 @@ from apps.accounts.serializers import (
     UserImportRowSerializer,
     UserImportUploadSerializer,
 )
+from apps.audit.services import record_audit_log
 from apps.common.choices import UserRole
 
 User = get_user_model()
@@ -54,6 +55,19 @@ class CurrentUserView(generics.RetrieveAPIView):
 class RegisterUserView(generics.CreateAPIView):
     serializer_class = RegisterUserSerializer
     permission_classes = [IsSchoolUserManager]
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        record_audit_log(
+            actor=self.request.user,
+            action="user_created",
+            category="user_management",
+            obj=user,
+            school=user.school,
+            target_user=user,
+            metadata={"role": user.role, "email": user.email},
+            request=self.request,
+        )
 
 
 class SchoolScopedUserListViewSet(viewsets.ReadOnlyModelViewSet):
@@ -225,6 +239,24 @@ class UserImportListCreateView(UserImportQuerysetMixin, APIView):
             )
         except DjangoValidationError as exc:
             raise_drf_validation_error(exc)
+        record_audit_log(
+            actor=request.user,
+            action="bulk_import_created",
+            category="import",
+            obj=batch,
+            school=batch.school,
+            metadata={
+                "import_domain": "accounts",
+                "import_type": batch.import_type,
+                "total_rows": batch.total_rows,
+                "successful_rows": batch.successful_rows,
+                "failed_rows": batch.failed_rows,
+                "duplicate_rows": batch.duplicate_rows,
+                "warning_rows": batch.warning_rows,
+                "status": batch.status,
+            },
+            request=request,
+        )
         output_serializer = UserImportBatchSerializer(batch)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
 

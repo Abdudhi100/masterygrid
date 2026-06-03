@@ -39,6 +39,7 @@ from apps.academics.serializers import (
     TermSerializer,
     TopicSerializer,
 )
+from apps.audit.services import record_audit_log
 from apps.common.choices import UserRole
 
 
@@ -300,6 +301,24 @@ class AcademicImportListCreateView(AcademicImportQuerysetMixin, APIView):
             )
         except DjangoValidationError as exc:
             raise_drf_validation_error(exc)
+        record_audit_log(
+            actor=request.user,
+            action="bulk_import_created",
+            category="import",
+            obj=batch,
+            school=batch.school,
+            metadata={
+                "import_domain": "academics",
+                "import_type": batch.import_type,
+                "total_rows": batch.total_rows,
+                "successful_rows": batch.successful_rows,
+                "failed_rows": batch.failed_rows,
+                "duplicate_rows": batch.duplicate_rows,
+                "warning_rows": batch.warning_rows,
+                "status": batch.status,
+            },
+            request=request,
+        )
         output_serializer = AcademicImportBatchSerializer(batch)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
 

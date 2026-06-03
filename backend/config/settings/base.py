@@ -56,6 +56,7 @@ LOCAL_APPS = [
     "apps.submissions.apps.SubmissionsConfig",
     "apps.analytics.apps.AnalyticsConfig",
     "apps.notifications.apps.NotificationsConfig",
+    "apps.audit.apps.AuditConfig",
     "apps.ai_generation.apps.AiGenerationConfig",
     "apps.practice.apps.PracticeConfig",
     "apps.interventions.apps.InterventionsConfig",

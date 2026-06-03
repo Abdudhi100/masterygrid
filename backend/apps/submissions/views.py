@@ -3,6 +3,7 @@ from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.audit.services import record_audit_log
 from apps.submissions.filters import SubmissionFilter
 from apps.submissions.models import Submission
 from apps.submissions.permissions import SubmissionPermission
@@ -49,6 +50,19 @@ class SubmissionViewSet(viewsets.ReadOnlyModelViewSet):
         )
         input_serializer.is_valid(raise_exception=True)
         submission = input_serializer.save()
+        record_audit_log(
+            actor=request.user,
+            action="submission_created",
+            category="submission",
+            obj=submission,
+            school=submission.school,
+            target_user=submission.student,
+            metadata={
+                "assignment": submission.assignment_id,
+                "status": submission.status,
+            },
+            request=request,
+        )
         response_serializer = SubmissionStartSerializer(
             submission,
             context=self.get_serializer_context(),
@@ -74,6 +88,23 @@ class SubmissionViewSet(viewsets.ReadOnlyModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         graded_submission = serializer.save()
+        record_audit_log(
+            actor=request.user,
+            action="assignment_submitted",
+            category="submission",
+            obj=graded_submission,
+            school=graded_submission.school,
+            target_user=graded_submission.student,
+            metadata={
+                "assignment": graded_submission.assignment_id,
+                "status": graded_submission.status,
+                "score": graded_submission.score,
+                "total_marks": graded_submission.total_marks,
+                "percentage": str(graded_submission.percentage),
+                "is_late": graded_submission.is_late,
+            },
+            request=request,
+        )
         response_serializer = SubmissionResultSerializer(
             graded_submission,
             context=self.get_serializer_context(),

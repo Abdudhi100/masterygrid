@@ -5,6 +5,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from apps.accounts.models import User
+from apps.audit.services import record_audit_log
 from apps.common.choices import UserRole
 from apps.interventions.models import InterventionNote, StudentIntervention
 from apps.interventions.permissions import InterventionPermission
@@ -79,6 +80,21 @@ class StudentInterventionViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         intervention = serializer.save()
+        record_audit_log(
+            actor=request.user,
+            action="intervention_created",
+            category="intervention",
+            obj=intervention,
+            school=intervention.school,
+            target_user=intervention.student,
+            metadata={
+                "priority": intervention.priority,
+                "status": intervention.status,
+                "category": intervention.category,
+                "source_type": intervention.source_type,
+            },
+            request=request,
+        )
         notify_intervention_created(intervention)
         output = StudentInterventionDetailSerializer(
             intervention,
@@ -95,6 +111,21 @@ class StudentInterventionViewSet(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         intervention = serializer.save()
+        record_audit_log(
+            actor=request.user,
+            action="intervention_updated",
+            category="intervention",
+            obj=intervention,
+            school=intervention.school,
+            target_user=intervention.student,
+            metadata={
+                "priority": intervention.priority,
+                "status": intervention.status,
+                "category": intervention.category,
+                "updated_fields": list(request.data.keys()),
+            },
+            request=request,
+        )
         output = StudentInterventionDetailSerializer(
             intervention,
             context=self.get_serializer_context(),
@@ -111,6 +142,19 @@ class StudentInterventionViewSet(viewsets.ModelViewSet):
             author=request.user,
             note=serializer.validated_data["note"],
             is_internal=serializer.validated_data.get("is_internal", True),
+        )
+        record_audit_log(
+            actor=request.user,
+            action="intervention_note_added",
+            category="intervention",
+            obj=note,
+            school=intervention.school,
+            target_user=intervention.student,
+            metadata={
+                "intervention": intervention.id,
+                "is_internal": note.is_internal,
+            },
+            request=request,
         )
         notify_intervention_note_added(intervention, note)
         output = InterventionNoteSerializer(note, context=self.get_serializer_context())
@@ -150,6 +194,21 @@ class StudentInterventionViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         intervention = serializer.save()
+        record_audit_log(
+            actor=request.user,
+            action="intervention_created",
+            category="intervention",
+            obj=intervention,
+            school=intervention.school,
+            target_user=intervention.student,
+            metadata={
+                "priority": intervention.priority,
+                "status": intervention.status,
+                "category": intervention.category,
+                "source_type": intervention.source_type,
+            },
+            request=request,
+        )
         notify_intervention_created(intervention)
         output = StudentInterventionDetailSerializer(
             intervention,

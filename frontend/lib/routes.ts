@@ -22,6 +22,7 @@ export const adminNavItems: NavItem[] = [
   { label: "Question Sources", href: "/admin/question-bank/sources" },
   { label: "Analytics", href: "/admin/analytics" },
   { label: "Interventions", href: "/admin/interventions" },
+  { label: "Audit Logs", href: "/admin/audit-logs" },
   { label: "Class Performance", href: "/admin/analytics/classes" },
   { label: "Subject Performance", href: "/admin/analytics/subjects" },
   { label: "Teacher Activity", href: "/admin/analytics/teachers" },

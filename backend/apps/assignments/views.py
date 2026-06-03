@@ -21,6 +21,7 @@ from apps.assignments.services import (
     publish_assignment,
     reopen_assignment,
 )
+from apps.audit.services import record_audit_log
 from apps.common.choices import UserRole
 
 
@@ -69,6 +70,15 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         assignment = self.get_object()
         archived_assignment = archive_assignment(assignment, request.user)
+        record_audit_log(
+            actor=request.user,
+            action="assignment_archived",
+            category="assignment",
+            obj=archived_assignment,
+            school=archived_assignment.school,
+            metadata={"via": "destroy", "status": archived_assignment.status},
+            request=request,
+        )
         serializer = AssignmentSerializer(
             archived_assignment,
             context=self.get_serializer_context(),
@@ -90,6 +100,20 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def publish(self, request, pk=None):
         assignment = self.get_object()
         published_assignment = publish_assignment(assignment, request.user)
+        record_audit_log(
+            actor=request.user,
+            action="assignment_published",
+            category="assignment",
+            obj=published_assignment,
+            school=published_assignment.school,
+            metadata={
+                "status": published_assignment.status,
+                "class_arm": published_assignment.class_arm_id,
+                "subject": published_assignment.subject_id,
+                "topic": published_assignment.topic_id,
+            },
+            request=request,
+        )
         serializer = AssignmentSerializer(
             published_assignment,
             context=self.get_serializer_context(),
@@ -100,6 +124,15 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def close(self, request, pk=None):
         assignment = self.get_object()
         closed_assignment = close_assignment(assignment, request.user)
+        record_audit_log(
+            actor=request.user,
+            action="assignment_closed",
+            category="assignment",
+            obj=closed_assignment,
+            school=closed_assignment.school,
+            metadata={"status": closed_assignment.status},
+            request=request,
+        )
         serializer = AssignmentSerializer(
             closed_assignment,
             context=self.get_serializer_context(),
@@ -121,6 +154,28 @@ class AssignmentViewSet(viewsets.ModelViewSet):
             late_submission_deadline=input_serializer.validated_data.get(
                 "late_submission_deadline",
             ),
+        )
+        record_audit_log(
+            actor=request.user,
+            action="assignment_deadline_extended",
+            category="assignment",
+            obj=updated_assignment,
+            school=updated_assignment.school,
+            metadata={
+                "due_at": updated_assignment.due_at.isoformat()
+                if updated_assignment.due_at
+                else None,
+                "original_due_at": updated_assignment.original_due_at.isoformat()
+                if updated_assignment.original_due_at
+                else None,
+                "allow_late_submissions": updated_assignment.allow_late_submissions,
+                "late_submission_deadline": (
+                    updated_assignment.late_submission_deadline.isoformat()
+                    if updated_assignment.late_submission_deadline
+                    else None
+                ),
+            },
+            request=request,
         )
         serializer = AssignmentSerializer(
             updated_assignment,
@@ -144,6 +199,21 @@ class AssignmentViewSet(viewsets.ModelViewSet):
                 "late_submission_deadline",
             ),
         )
+        record_audit_log(
+            actor=request.user,
+            action="assignment_reopened",
+            category="assignment",
+            obj=updated_assignment,
+            school=updated_assignment.school,
+            metadata={
+                "status": updated_assignment.status,
+                "due_at": updated_assignment.due_at.isoformat()
+                if updated_assignment.due_at
+                else None,
+                "allow_late_submissions": updated_assignment.allow_late_submissions,
+            },
+            request=request,
+        )
         serializer = AssignmentSerializer(
             updated_assignment,
             context=self.get_serializer_context(),
@@ -154,6 +224,15 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def archive(self, request, pk=None):
         assignment = self.get_object()
         archived_assignment = archive_assignment(assignment, request.user)
+        record_audit_log(
+            actor=request.user,
+            action="assignment_archived",
+            category="assignment",
+            obj=archived_assignment,
+            school=archived_assignment.school,
+            metadata={"status": archived_assignment.status},
+            request=request,
+        )
         serializer = AssignmentSerializer(
             archived_assignment,
             context=self.get_serializer_context(),
