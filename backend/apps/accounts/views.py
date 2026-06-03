@@ -1,9 +1,19 @@
 from django.contrib.auth import get_user_model
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, generics, mixins, viewsets
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.shortcuts import get_object_or_404
+from rest_framework import filters, generics, mixins, status, viewsets
+from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from apps.accounts.models import StudentProfile, TeacherProfile
+from apps.accounts.imports import (
+    build_user_import_preflight_report,
+    process_user_import,
+)
+from apps.accounts.models import StudentProfile, TeacherProfile, UserImportBatch
 from apps.accounts.permissions import (
     IsProfileOwnerOrSchoolAdmin,
     IsSchoolUserManager,
@@ -16,10 +26,21 @@ from apps.accounts.serializers import (
     StudentProfileSerializer,
     TeacherListSerializer,
     TeacherProfileSerializer,
+    UserImportBatchSerializer,
+    UserImportRowSerializer,
+    UserImportUploadSerializer,
 )
 from apps.common.choices import UserRole
 
 User = get_user_model()
+
+
+def raise_drf_validation_error(exc):
+    if hasattr(exc, "message_dict"):
+        raise ValidationError(exc.message_dict)
+    if hasattr(exc, "messages"):
+        raise ValidationError(exc.messages)
+    raise ValidationError(str(exc))
 
 
 class CurrentUserView(generics.RetrieveAPIView):
@@ -140,3 +161,88 @@ class StudentProfileViewSet(ProfileViewSet):
         "guardian_phone",
         "school__name",
     ]
+
+
+class UserImportQuerysetMixin:
+    def get_queryset(self):
+        queryset = UserImportBatch.objects.select_related(
+            "school",
+            "uploaded_by",
+        ).prefetch_related("rows")
+        user = self.request.user
+        if is_platform_admin(user):
+            return queryset
+        if user and user.is_authenticated and user.role == UserRole.SCHOOL_ADMIN:
+            return queryset.filter(school=user.school)
+        return queryset.none()
+
+
+class UserImportPreflightView(APIView):
+    permission_classes = [IsSchoolUserManager]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        serializer = UserImportUploadSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            report = build_user_import_preflight_report(
+                uploaded_file=serializer.validated_data["file"],
+                import_type=serializer.validated_data["import_type"],
+                school=serializer.validated_data["school"],
+            )
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+        return Response(report)
+
+
+class UserImportListCreateView(UserImportQuerysetMixin, APIView):
+    permission_classes = [IsSchoolUserManager]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request):
+        queryset = self.get_queryset()
+        import_type = request.query_params.get("import_type")
+        if import_type:
+            queryset = queryset.filter(import_type=import_type)
+        serializer = UserImportBatchSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = UserImportUploadSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            batch = process_user_import(
+                uploaded_file=serializer.validated_data["file"],
+                import_type=serializer.validated_data["import_type"],
+                school=serializer.validated_data["school"],
+                uploaded_by=request.user,
+            )
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+        output_serializer = UserImportBatchSerializer(batch)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class UserImportDetailView(UserImportQuerysetMixin, APIView):
+    permission_classes = [IsSchoolUserManager]
+
+    def get(self, request, pk):
+        batch = get_object_or_404(self.get_queryset(), pk=pk)
+        serializer = UserImportBatchSerializer(batch)
+        return Response(serializer.data)
+
+
+class UserImportRowsView(UserImportQuerysetMixin, APIView):
+    permission_classes = [IsSchoolUserManager]
+
+    def get(self, request, pk):
+        batch = get_object_or_404(self.get_queryset(), pk=pk)
+        rows = batch.rows.select_related("user").order_by("row_number")
+        serializer = UserImportRowSerializer(rows, many=True)
+        return Response(serializer.data)

@@ -6,6 +6,8 @@ from apps.academics.models import ClassArm, LessonLog, Subject, Topic
 from apps.assignments.models import Assignment, AssignmentQuestion
 from apps.assignments.services import (
     create_assignment_from_topic,
+    get_assignment_availability,
+    get_deadline_status,
     validate_lesson_log_matches_assignment,
     validate_teacher_can_create_assignment,
 )
@@ -68,6 +70,15 @@ class AssignmentSerializer(serializers.ModelSerializer):
     topic_title = serializers.CharField(source="topic.title", read_only=True)
     lesson_log_display = serializers.SerializerMethodField()
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    deadline_extended_by_name = serializers.CharField(
+        source="deadline_extended_by.full_name",
+        read_only=True,
+    )
+    deadline_status = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+    is_due_soon = serializers.SerializerMethodField()
+    can_submit_now = serializers.SerializerMethodField()
+    late_submission_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Assignment
@@ -92,6 +103,18 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "duration_minutes",
             "starts_at",
             "due_at",
+            "original_due_at",
+            "allow_late_submissions",
+            "late_submission_deadline",
+            "deadline_extended_at",
+            "deadline_extended_by",
+            "deadline_extended_by_name",
+            "late_penalty_percent",
+            "deadline_status",
+            "is_overdue",
+            "is_due_soon",
+            "can_submit_now",
+            "late_submission_count",
             "status",
             "status_display",
             "published_at",
@@ -109,6 +132,14 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "topic_title",
             "lesson_log_display",
             "status_display",
+            "deadline_extended_at",
+            "deadline_extended_by",
+            "deadline_extended_by_name",
+            "deadline_status",
+            "is_overdue",
+            "is_due_soon",
+            "can_submit_now",
+            "late_submission_count",
             "published_at",
             "assignment_questions",
             "created_at",
@@ -122,6 +153,21 @@ class AssignmentSerializer(serializers.ModelSerializer):
         if not obj.lesson_log_id:
             return None
         return str(obj.lesson_log)
+
+    def get_deadline_status(self, obj):
+        return get_deadline_status(obj)
+
+    def get_is_overdue(self, obj):
+        return get_assignment_availability(obj)["is_overdue"]
+
+    def get_is_due_soon(self, obj):
+        return get_assignment_availability(obj)["is_due_soon"]
+
+    def get_can_submit_now(self, obj):
+        return get_assignment_availability(obj)["can_submit_now"]
+
+    def get_late_submission_count(self, obj):
+        return obj.submissions.filter(is_late=True).count()
 
 
 class AssignmentCreateUpdateSerializer(AssignmentSerializer):
@@ -182,6 +228,10 @@ class AssignmentCreateUpdateSerializer(AssignmentSerializer):
                 "duration_minutes",
                 "starts_at",
                 "due_at",
+                "original_due_at",
+                "allow_late_submissions",
+                "late_submission_deadline",
+                "late_penalty_percent",
                 "status",
                 "published_at",
             ]:
@@ -286,6 +336,8 @@ class AssignmentGenerateFromTopicSerializer(serializers.Serializer):
     duration_minutes = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     starts_at = serializers.DateTimeField(required=False, allow_null=True)
     due_at = serializers.DateTimeField(required=False, allow_null=True)
+    allow_late_submissions = serializers.BooleanField(required=False, default=False)
+    late_submission_deadline = serializers.DateTimeField(required=False, allow_null=True)
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -316,6 +368,27 @@ class AssignmentGenerateFromTopicSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"due_at": "Due date must be after start date."}
             )
+        if attrs.get("late_submission_deadline"):
+            if not attrs.get("allow_late_submissions"):
+                raise serializers.ValidationError(
+                    {
+                        "late_submission_deadline": (
+                            "Enable late submissions before setting a late deadline."
+                        )
+                    }
+                )
+            if not attrs.get("due_at"):
+                raise serializers.ValidationError(
+                    {"due_at": "Due date is required when setting a late deadline."}
+                )
+            if attrs["late_submission_deadline"] <= attrs["due_at"]:
+                raise serializers.ValidationError(
+                    {
+                        "late_submission_deadline": (
+                            "Late submission deadline must be after due date."
+                        )
+                    }
+                )
 
         try:
             validate_teacher_can_create_assignment(
@@ -351,6 +424,13 @@ class AssignmentGenerateFromTopicSerializer(serializers.Serializer):
                 duration_minutes=validated_data.get("duration_minutes"),
                 starts_at=validated_data.get("starts_at"),
                 due_at=validated_data.get("due_at"),
+                allow_late_submissions=validated_data.get(
+                    "allow_late_submissions",
+                    False,
+                ),
+                late_submission_deadline=validated_data.get(
+                    "late_submission_deadline",
+                ),
             )
         except DjangoValidationError as exc:
             raise_drf_validation_error(exc)
@@ -358,3 +438,61 @@ class AssignmentGenerateFromTopicSerializer(serializers.Serializer):
 
 class AssignmentPublishSerializer(serializers.Serializer):
     detail = serializers.CharField(read_only=True)
+
+
+class AssignmentDeadlineActionSerializer(serializers.Serializer):
+    due_at = serializers.DateTimeField(required=True)
+    allow_late_submissions = serializers.BooleanField(required=False)
+    late_submission_deadline = serializers.DateTimeField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        allow_late = attrs.get("allow_late_submissions")
+        late_deadline = attrs.get("late_submission_deadline")
+        due_at = attrs.get("due_at")
+
+        if allow_late is False and late_deadline:
+            raise serializers.ValidationError(
+                {
+                    "late_submission_deadline": (
+                        "Enable late submissions before setting a late deadline."
+                    )
+                }
+            )
+        if late_deadline and due_at and late_deadline <= due_at:
+            raise serializers.ValidationError(
+                {
+                    "late_submission_deadline": (
+                        "Late submission deadline must be after due date."
+                    )
+                }
+            )
+        return attrs
+
+
+class AssignmentReopenSerializer(serializers.Serializer):
+    due_at = serializers.DateTimeField(required=False, allow_null=True)
+    allow_late_submissions = serializers.BooleanField(required=False)
+    late_submission_deadline = serializers.DateTimeField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        allow_late = attrs.get("allow_late_submissions")
+        late_deadline = attrs.get("late_submission_deadline")
+        due_at = attrs.get("due_at")
+
+        if allow_late is False and late_deadline:
+            raise serializers.ValidationError(
+                {
+                    "late_submission_deadline": (
+                        "Enable late submissions before setting a late deadline."
+                    )
+                }
+            )
+        if late_deadline and due_at and late_deadline <= due_at:
+            raise serializers.ValidationError(
+                {
+                    "late_submission_deadline": (
+                        "Late submission deadline must be after due date."
+                    )
+                }
+            )
+        return attrs

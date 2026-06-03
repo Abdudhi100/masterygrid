@@ -1,6 +1,11 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from apps.academics.views import (
+    AcademicImportDetailView,
+    AcademicImportListCreateView,
+    AcademicImportPreflightView,
+    AcademicImportRowsView,
     AcademicSessionViewSet,
     ClassArmViewSet,
     ClassLevelViewSet,
@@ -34,3 +39,10 @@ router.register(
 router.register("lesson-logs", LessonLogViewSet, basename="lesson-log")
 
 urlpatterns = router.urls
+
+urlpatterns += [
+    path("imports/preflight/", AcademicImportPreflightView.as_view(), name="academic-import-preflight"),
+    path("imports/", AcademicImportListCreateView.as_view(), name="academic-import-list"),
+    path("imports/<int:pk>/", AcademicImportDetailView.as_view(), name="academic-import-detail"),
+    path("imports/<int:pk>/rows/", AcademicImportRowsView.as_view(), name="academic-import-rows"),
+]

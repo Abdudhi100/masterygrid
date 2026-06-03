@@ -9,6 +9,10 @@ from apps.accounts.views import (
     StudentViewSet,
     TeacherProfileViewSet,
     TeacherViewSet,
+    UserImportDetailView,
+    UserImportListCreateView,
+    UserImportPreflightView,
+    UserImportRowsView,
 )
 
 app_name = "accounts"
@@ -24,4 +28,8 @@ urlpatterns = [
     path("register/", RegisterUserView.as_view(), name="register"),
     path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("imports/preflight/", UserImportPreflightView.as_view(), name="user-import-preflight"),
+    path("imports/", UserImportListCreateView.as_view(), name="user-import-list"),
+    path("imports/<int:pk>/", UserImportDetailView.as_view(), name="user-import-detail"),
+    path("imports/<int:pk>/rows/", UserImportRowsView.as_view(), name="user-import-rows"),
 ] + router.urls

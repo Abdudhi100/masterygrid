@@ -15,6 +15,10 @@ import {
   getAssignments,
   publishAssignment
 } from "@/lib/academics";
+import {
+  deadlineStatusTone,
+  formatDeadlineStatus
+} from "@/lib/assignmentDeadlines";
 import { ApiError } from "@/lib/api";
 import type { Assignment, AssignmentStatus } from "@/types/academics";
 
@@ -121,6 +125,9 @@ export default function TeacherAssignmentsPage() {
                     </h2>
                     <Badge tone={statusTone[assignment.status]}>
                       {assignment.status}
+                    </Badge>
+                    <Badge tone={deadlineStatusTone(assignment.deadline_status)}>
+                      {formatDeadlineStatus(assignment.deadline_status)}
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm font-medium text-muted">

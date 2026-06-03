@@ -43,6 +43,9 @@ class Submission(TimeStampedModel):
         null=True,
         blank=True,
     )
+    is_late = models.BooleanField(default=False)
+    submitted_after_due_seconds = models.PositiveIntegerField(null=True, blank=True)
+    deadline_status_at_submit = models.CharField(max_length=32, blank=True)
     question_order = models.JSONField(default=list, blank=True)
 
     class Meta:

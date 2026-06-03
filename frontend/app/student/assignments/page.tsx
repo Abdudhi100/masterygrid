@@ -11,6 +11,10 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Select } from "@/components/ui/Select";
 import { ApiError } from "@/lib/api";
+import {
+  deadlineStatusTone,
+  formatDeadlineStatus
+} from "@/lib/assignmentDeadlines";
 import { getMyAssignments } from "@/lib/submissions";
 import type { StudentAssignmentItem } from "@/types/submissions";
 
@@ -23,11 +27,7 @@ function isCompleted(assignment: StudentAssignmentItem) {
 }
 
 function isOverdue(assignment: StudentAssignmentItem) {
-  return Boolean(
-    assignment.due_at &&
-      new Date(assignment.due_at) < new Date() &&
-      !isCompleted(assignment)
-  );
+  return assignment.deadline_status === "overdue";
 }
 
 function formatDate(value: string | null) {
@@ -49,6 +49,9 @@ function statusTone(assignment: StudentAssignmentItem) {
   }
   if (isOverdue(assignment)) {
     return "danger";
+  }
+  if (assignment.deadline_status === "late_open" || assignment.deadline_status === "due_soon") {
+    return "warning";
   }
   return "brand";
 }
@@ -133,9 +136,14 @@ export default function StudentAssignmentsPage() {
                       {assignment.title}
                     </h2>
                     <Badge tone={statusTone(assignment)}>
-                      {isOverdue(assignment)
-                        ? "overdue"
-                        : assignment.submission_status ?? "pending"}
+                      {assignment.submission_status ??
+                        formatDeadlineStatus(assignment.deadline_status)}
+                    </Badge>
+                    <Badge
+                      tone={deadlineStatusTone(assignment.deadline_status)}
+                      data-testid="student-assignment-deadline-badge"
+                    >
+                      {formatDeadlineStatus(assignment.deadline_status)}
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm font-medium text-muted">
@@ -148,6 +156,11 @@ export default function StudentAssignmentsPage() {
                       ? `${assignment.duration_minutes} minutes`
                       : "No timer"}{" "}
                     · Due {formatDate(assignment.due_at)}
+                    {assignment.allow_late_submissions
+                      ? ` · Late until ${formatDate(
+                          assignment.late_submission_deadline
+                        )}`
+                      : ""}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -167,10 +180,16 @@ export default function StudentAssignmentsPage() {
                     >
                       <Button>Continue Assignment</Button>
                     </Link>
-                  ) : (
+                  ) : assignment.can_submit_now ? (
                     <Link href={`/student/assignments/${assignment.id}/attempt`}>
                       <Button>Start Assignment</Button>
                     </Link>
+                  ) : (
+                    <Button disabled>
+                      {assignment.deadline_status === "scheduled"
+                        ? "Not Started Yet"
+                        : "Unavailable"}
+                    </Button>
                   )}
                 </div>
               </div>

@@ -151,3 +151,101 @@ class StudentProfile(TimeStampedModel):
 
         if self.user_id and self.user.school_id != self.school_id:
             raise ValidationError({"school": "Profile school must match the user's school."})
+
+
+class UserImportType(models.TextChoices):
+    STUDENTS = "students", "Students"
+    TEACHERS = "teachers", "Teachers"
+
+
+class UserImportBatchStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    PROCESSING = "processing", "Processing"
+    COMPLETED = "completed", "Completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors", "Completed with errors"
+    FAILED = "failed", "Failed"
+
+
+class UserImportRowStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    IMPORTED = "imported", "Imported"
+    FAILED = "failed", "Failed"
+    WARNING = "warning", "Warning"
+    DUPLICATE = "duplicate", "Duplicate"
+
+
+class UserImportBatch(TimeStampedModel):
+    school = models.ForeignKey(
+        "schools.School",
+        related_name="user_import_batches",
+        on_delete=models.CASCADE,
+    )
+    uploaded_by = models.ForeignKey(
+        User,
+        related_name="user_import_batches",
+        on_delete=models.PROTECT,
+    )
+    import_type = models.CharField(max_length=32, choices=UserImportType.choices)
+    file = models.FileField(upload_to="user_imports/%Y/%m/")
+    original_filename = models.CharField(max_length=255, blank=True)
+    status = models.CharField(
+        max_length=32,
+        choices=UserImportBatchStatus.choices,
+        default=UserImportBatchStatus.PENDING,
+    )
+    total_rows = models.PositiveIntegerField(default=0)
+    successful_rows = models.PositiveIntegerField(default=0)
+    failed_rows = models.PositiveIntegerField(default=0)
+    duplicate_rows = models.PositiveIntegerField(default=0)
+    warning_rows = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["school", "import_type", "status"]),
+            models.Index(fields=["uploaded_by", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.get_import_type_display()} import #{self.pk}"
+
+
+class UserImportRow(TimeStampedModel):
+    batch = models.ForeignKey(
+        UserImportBatch,
+        related_name="rows",
+        on_delete=models.CASCADE,
+    )
+    row_number = models.PositiveIntegerField()
+    status = models.CharField(
+        max_length=16,
+        choices=UserImportRowStatus.choices,
+        default=UserImportRowStatus.PENDING,
+    )
+    raw_data = models.JSONField(default=dict)
+    error_message = models.TextField(blank=True)
+    warning_message = models.TextField(blank=True)
+    user = models.ForeignKey(
+        User,
+        related_name="import_rows",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["batch", "row_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["batch", "row_number"],
+                name="unique_user_import_row_number_per_batch",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["batch", "status"]),
+            models.Index(fields=["user"]),
+        ]
+
+    def __str__(self):
+        return f"{self.batch_id} - row {self.row_number}"

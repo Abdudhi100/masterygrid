@@ -3,6 +3,9 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from apps.academics.models import (
+    AcademicImportBatch,
+    AcademicImportRow,
+    AcademicImportType,
     AcademicSession,
     ClassArm,
     ClassLevel,
@@ -13,6 +16,7 @@ from apps.academics.models import (
     Term,
     Topic,
 )
+from apps.academics.selectors import is_platform_admin
 from apps.common.choices import UserRole
 from apps.schools.models import School
 
@@ -399,3 +403,106 @@ class LessonLogSerializer(CleanModelSerializer):
 
     def get_term_name(self, obj):
         return obj.term.get_name_display() if obj.term_id else None
+
+
+class AcademicImportBatchSerializer(serializers.ModelSerializer):
+    school_name = serializers.CharField(source="school.name", read_only=True)
+    uploaded_by_name = serializers.CharField(source="uploaded_by.full_name", read_only=True)
+
+    class Meta:
+        model = AcademicImportBatch
+        fields = [
+            "id",
+            "school",
+            "school_name",
+            "uploaded_by",
+            "uploaded_by_name",
+            "import_type",
+            "original_filename",
+            "status",
+            "total_rows",
+            "successful_rows",
+            "failed_rows",
+            "duplicate_rows",
+            "warning_rows",
+            "error_message",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class AcademicImportRowSerializer(serializers.ModelSerializer):
+    student_enrollment_display = serializers.SerializerMethodField()
+    teacher_assignment_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AcademicImportRow
+        fields = [
+            "id",
+            "batch",
+            "row_number",
+            "status",
+            "raw_data",
+            "error_message",
+            "warning_message",
+            "student_enrollment",
+            "student_enrollment_display",
+            "teacher_assignment",
+            "teacher_assignment_display",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_student_enrollment_display(self, obj):
+        return str(obj.student_enrollment) if obj.student_enrollment_id else ""
+
+    def get_teacher_assignment_display(self, obj):
+        return str(obj.teacher_assignment) if obj.teacher_assignment_id else ""
+
+
+class AcademicImportUploadSerializer(serializers.Serializer):
+    import_type = serializers.ChoiceField(choices=AcademicImportType.choices)
+    school = serializers.PrimaryKeyRelatedField(
+        queryset=School.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    file = serializers.FileField(write_only=True)
+
+    def validate_file(self, value):
+        filename = getattr(value, "name", "")
+        if not filename.lower().endswith(".csv"):
+            raise serializers.ValidationError("Only CSV imports are supported.")
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError("Authentication is required.")
+
+        target_school = attrs.get("school")
+        if is_platform_admin(user):
+            if not target_school:
+                raise serializers.ValidationError(
+                    {"school": "Platform admins must choose a school for academic imports."}
+                )
+            return attrs
+
+        if user.role != UserRole.SCHOOL_ADMIN:
+            raise serializers.ValidationError("You cannot import academic records.")
+
+        if not user.school_id:
+            raise serializers.ValidationError(
+                {"school": "School admins must belong to a school."}
+            )
+
+        if target_school and target_school.id != user.school_id:
+            raise serializers.ValidationError(
+                {"school": "School admins can only import for their own school."}
+            )
+
+        attrs["school"] = user.school
+        return attrs

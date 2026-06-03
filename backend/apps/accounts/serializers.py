@@ -2,7 +2,14 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
 
-from apps.accounts.models import StudentProfile, TeacherProfile
+from apps.accounts.models import (
+    StudentProfile,
+    TeacherProfile,
+    UserImportBatch,
+    UserImportRow,
+    UserImportType,
+)
+from apps.accounts.permissions import is_platform_admin
 from apps.common.choices import UserRole
 from apps.schools.models import School
 
@@ -389,3 +396,99 @@ class StudentListSerializer(serializers.ModelSerializer):
             "student_profile",
         ]
         read_only_fields = fields
+
+
+class UserImportBatchSerializer(serializers.ModelSerializer):
+    school_name = serializers.CharField(source="school.name", read_only=True)
+    uploaded_by_name = serializers.CharField(source="uploaded_by.full_name", read_only=True)
+
+    class Meta:
+        model = UserImportBatch
+        fields = [
+            "id",
+            "school",
+            "school_name",
+            "uploaded_by",
+            "uploaded_by_name",
+            "import_type",
+            "original_filename",
+            "status",
+            "total_rows",
+            "successful_rows",
+            "failed_rows",
+            "duplicate_rows",
+            "warning_rows",
+            "error_message",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class UserImportRowSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.full_name", read_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+
+    class Meta:
+        model = UserImportRow
+        fields = [
+            "id",
+            "batch",
+            "row_number",
+            "status",
+            "raw_data",
+            "error_message",
+            "warning_message",
+            "user",
+            "user_name",
+            "user_email",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class UserImportUploadSerializer(serializers.Serializer):
+    import_type = serializers.ChoiceField(choices=UserImportType.choices)
+    school = serializers.PrimaryKeyRelatedField(
+        queryset=School.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    file = serializers.FileField(write_only=True)
+
+    def validate_file(self, value):
+        filename = getattr(value, "name", "")
+        if not filename.lower().endswith(".csv"):
+            raise serializers.ValidationError("Only CSV imports are supported.")
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError("Authentication is required.")
+
+        target_school = attrs.get("school")
+        if is_platform_admin(user):
+            if not target_school:
+                raise serializers.ValidationError(
+                    {"school": "Platform admins must choose a school for user imports."}
+                )
+            return attrs
+
+        if user.role != UserRole.SCHOOL_ADMIN:
+            raise serializers.ValidationError("You cannot import users.")
+
+        if not user.school_id:
+            raise serializers.ValidationError(
+                {"school": "School admins must belong to a school."}
+            )
+
+        if target_school and target_school.id != user.school_id:
+            raise serializers.ValidationError(
+                {"school": "School admins can only import for their own school."}
+            )
+
+        attrs["school"] = user.school
+        return attrs

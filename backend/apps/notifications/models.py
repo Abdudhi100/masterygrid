@@ -10,6 +10,11 @@ from apps.common.models import TimeStampedModel
 class NotificationType(models.TextChoices):
     ASSIGNMENT_PUBLISHED = "assignment_published", "Assignment Published"
     ASSIGNMENT_DUE_SOON = "assignment_due_soon", "Assignment Due Soon"
+    ASSIGNMENT_DEADLINE_EXTENDED = (
+        "assignment_deadline_extended",
+        "Assignment Deadline Extended",
+    )
+    ASSIGNMENT_REOPENED = "assignment_reopened", "Assignment Reopened"
     ASSIGNMENT_SUBMITTED = "assignment_submitted", "Assignment Submitted"
     LOW_SUBMISSION_RATE = "low_submission_rate", "Low Submission Rate"
     WEAK_TOPIC_DETECTED = "weak_topic_detected", "Weak Topic Detected"

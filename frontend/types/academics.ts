@@ -259,6 +259,16 @@ export type QueryParams = Record<
 >;
 
 export type AssignmentStatus = "draft" | "published" | "closed" | "archived";
+export type AssignmentDeadlineStatus =
+  | "draft"
+  | "scheduled"
+  | "open"
+  | "due_soon"
+  | "overdue"
+  | "late_open"
+  | "closed"
+  | "submitted"
+  | "graded";
 
 export type AssignmentQuestionPreview = {
   id: number;
@@ -300,6 +310,18 @@ export type Assignment = {
   duration_minutes: number | null;
   starts_at: string | null;
   due_at: string | null;
+  original_due_at: string | null;
+  allow_late_submissions: boolean;
+  late_submission_deadline: string | null;
+  deadline_extended_at: string | null;
+  deadline_extended_by: number | null;
+  deadline_extended_by_name?: string | null;
+  late_penalty_percent: number;
+  deadline_status: AssignmentDeadlineStatus;
+  is_overdue: boolean;
+  is_due_soon: boolean;
+  can_submit_now: boolean;
+  late_submission_count?: number;
   status: AssignmentStatus;
   status_display?: string;
   published_at: string | null;
@@ -319,6 +341,20 @@ export type AssignmentGeneratePayload = {
   duration_minutes?: number | null;
   starts_at?: string | null;
   due_at?: string | null;
+  allow_late_submissions?: boolean;
+  late_submission_deadline?: string | null;
+};
+
+export type AssignmentDeadlinePayload = {
+  due_at: string;
+  allow_late_submissions?: boolean;
+  late_submission_deadline?: string | null;
+};
+
+export type AssignmentReopenPayload = {
+  due_at?: string | null;
+  allow_late_submissions?: boolean;
+  late_submission_deadline?: string | null;
 };
 
 export type LegacyRegisterUserPayload = {

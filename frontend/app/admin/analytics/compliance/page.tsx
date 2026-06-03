@@ -60,6 +60,10 @@ export default function AdminAssignmentCompliancePage() {
     (total, row) => total + row.submitted_count,
     0
   );
+  const lateCount = rows.reduce(
+    (total, row) => total + row.late_submission_count,
+    0
+  );
 
   return (
     <>
@@ -70,10 +74,11 @@ export default function AdminAssignmentCompliancePage() {
 
       {rows.length ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard label="Assignments" value={rows.length} />
             <StatCard label="Expected students" value={expectedStudents} />
             <StatCard label="Submitted" value={submittedCount} />
+            <StatCard label="Late submissions" value={lateCount} />
             <StatCard label="Poor compliance" value={poorCount} />
           </section>
 
@@ -131,6 +136,10 @@ export default function AdminAssignmentCompliancePage() {
                 {
                   key: "graded_count",
                   header: "Graded"
+                },
+                {
+                  key: "late_submission_count",
+                  header: "Late"
                 },
                 {
                   key: "not_started_count",

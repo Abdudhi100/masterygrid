@@ -77,6 +77,8 @@ function AssignmentCreateForm() {
   const [durationMinutes, setDurationMinutes] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [dueAt, setDueAt] = useState("");
+  const [allowLateSubmissions, setAllowLateSubmissions] = useState(false);
+  const [lateSubmissionDeadline, setLateSubmissionDeadline] = useState("");
 
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
@@ -252,6 +254,12 @@ function AssignmentCreateForm() {
     if (startsAt && dueAt && new Date(startsAt) > new Date(dueAt)) {
       return "Due date cannot be before start date.";
     }
+    if (lateSubmissionDeadline && !allowLateSubmissions) {
+      return "Enable late submissions before setting a late deadline.";
+    }
+    if (lateSubmissionDeadline && dueAt && new Date(lateSubmissionDeadline) <= new Date(dueAt)) {
+      return "Late submission deadline must be after due date.";
+    }
     return "";
   }
 
@@ -278,7 +286,9 @@ function AssignmentCreateForm() {
         question_count: Number(questionCount),
         duration_minutes: durationMinutes ? Number(durationMinutes) : null,
         starts_at: startsAt || null,
-        due_at: dueAt || null
+        due_at: dueAt || null,
+        allow_late_submissions: allowLateSubmissions,
+        late_submission_deadline: lateSubmissionDeadline || null
       });
       setDraftAssignment(assignment);
       setSuccess("Draft assignment generated.");
@@ -473,17 +483,51 @@ function AssignmentCreateForm() {
             <Input
               label="Starts at"
               type="datetime-local"
+              data-testid="assignment-starts-at-input"
               value={startsAt}
               onChange={(event) => setStartsAt(event.target.value)}
             />
           </div>
 
-          <Input
-            label="Due at"
-            type="datetime-local"
-            value={dueAt}
-            onChange={(event) => setDueAt(event.target.value)}
-          />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input
+              label="Due at"
+              type="datetime-local"
+              data-testid="assignment-due-at-input"
+              value={dueAt}
+              onChange={(event) => setDueAt(event.target.value)}
+            />
+            <Input
+              label="Late submission deadline"
+              type="datetime-local"
+              data-testid="assignment-late-deadline-input"
+              disabled={!allowLateSubmissions}
+              value={lateSubmissionDeadline}
+              onChange={(event) => setLateSubmissionDeadline(event.target.value)}
+            />
+          </div>
+
+          <label className="flex items-start gap-3 rounded-md border border-line bg-surface px-3 py-3 text-sm text-muted">
+            <input
+              type="checkbox"
+              data-testid="assignment-allow-late-checkbox"
+              className="mt-1"
+              checked={allowLateSubmissions}
+              onChange={(event) => {
+                setAllowLateSubmissions(event.target.checked);
+                if (!event.target.checked) {
+                  setLateSubmissionDeadline("");
+                }
+              }}
+            />
+            <span>
+              <span className="block font-semibold text-ink">
+                Allow late submissions
+              </span>
+              Students can submit after the due date until the late deadline,
+              and the submission will be marked late.
+            </span>
+          </label>
 
           <label className="block">
             <span className="mb-2 block text-sm font-medium text-ink">

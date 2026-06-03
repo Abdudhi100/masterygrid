@@ -117,10 +117,12 @@ export type AdminAssignmentCompliance = {
   topic: string;
   status: string;
   due_at: string | null;
+  deadline_status: string;
   expected_students: number;
   started_count: number;
   submitted_count: number;
   graded_count: number;
+  late_submission_count: number;
   not_started_count: number;
   submission_rate: number;
   compliance_status: string;
@@ -564,6 +566,7 @@ export type AssignmentResultSummary = {
   total_started: number;
   total_submitted: number;
   total_graded: number;
+  total_late: number;
   total_not_started: number;
   submission_rate: number;
   average_percentage: number;
@@ -581,6 +584,8 @@ export type StudentResultRow = {
   percentage: number;
   submitted_at: string | null;
   time_spent_seconds: number | null;
+  is_late: boolean;
+  submitted_after_due_seconds: number | null;
 };
 
 export type QuestionPerformanceRow = {
@@ -608,6 +613,10 @@ export type TeacherAssignmentResults = {
     status: string;
     question_count: number;
     due_at: string | null;
+    original_due_at: string | null;
+    allow_late_submissions: boolean;
+    late_submission_deadline: string | null;
+    deadline_status: string;
   };
   submission_summary: AssignmentResultSummary;
   student_results: StudentResultRow[];

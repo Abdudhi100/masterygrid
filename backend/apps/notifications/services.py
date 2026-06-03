@@ -109,15 +109,7 @@ def mark_all_notifications_read(user):
 
 
 def notify_assignment_published(assignment, actor=None):
-    students = User.objects.filter(
-        id__in=StudentEnrollment.objects.filter(
-            school=assignment.school,
-            class_arm=assignment.class_arm,
-            is_active=True,
-        ).values("student_id"),
-        is_active=True,
-        role=UserRole.STUDENT,
-    )
+    students = _assignment_recipient_students(assignment)
     return safe_create_bulk_notifications(
         students,
         title="New assignment published",
@@ -133,6 +125,63 @@ def notify_assignment_published(assignment, actor=None):
             "assignment_id": assignment.id,
             "subject": assignment.subject.name,
             "topic": assignment.topic.title,
+        },
+    )
+
+
+def _assignment_recipient_students(assignment):
+    return User.objects.filter(
+        id__in=StudentEnrollment.objects.filter(
+            school=assignment.school,
+            class_arm=assignment.class_arm,
+            is_active=True,
+        ).values("student_id"),
+        is_active=True,
+        role=UserRole.STUDENT,
+    )
+
+
+def notify_assignment_deadline_extended(assignment, actor=None):
+    students = _assignment_recipient_students(assignment)
+    return safe_create_bulk_notifications(
+        students,
+        title="Assignment deadline extended",
+        message=f"The deadline for {assignment.title} has been extended.",
+        notification_type=NotificationType.ASSIGNMENT_DEADLINE_EXTENDED,
+        priority=NotificationPriority.NORMAL,
+        actor=actor or assignment.teacher,
+        school=assignment.school,
+        target_url=f"/student/assignments/{assignment.id}",
+        object_type="assignment",
+        object_id=assignment.id,
+        metadata={
+            "assignment_id": assignment.id,
+            "due_at": assignment.due_at.isoformat() if assignment.due_at else None,
+            "late_submission_deadline": (
+                assignment.late_submission_deadline.isoformat()
+                if assignment.late_submission_deadline
+                else None
+            ),
+        },
+    )
+
+
+def notify_assignment_reopened(assignment, actor=None):
+    students = _assignment_recipient_students(assignment)
+    return safe_create_bulk_notifications(
+        students,
+        title="Assignment reopened",
+        message=f"{assignment.title} has been reopened.",
+        notification_type=NotificationType.ASSIGNMENT_REOPENED,
+        priority=NotificationPriority.NORMAL,
+        actor=actor or assignment.teacher,
+        school=assignment.school,
+        target_url=f"/student/assignments/{assignment.id}",
+        object_type="assignment",
+        object_id=assignment.id,
+        metadata={
+            "assignment_id": assignment.id,
+            "due_at": assignment.due_at.isoformat() if assignment.due_at else None,
         },
     )
 

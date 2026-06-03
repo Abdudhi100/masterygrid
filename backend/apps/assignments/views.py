@@ -9,13 +9,17 @@ from apps.assignments.permissions import AssignmentPermission
 from apps.assignments.selectors import get_assignment_queryset_for_user, is_platform_admin
 from apps.assignments.serializers import (
     AssignmentCreateUpdateSerializer,
+    AssignmentDeadlineActionSerializer,
     AssignmentGenerateFromTopicSerializer,
+    AssignmentReopenSerializer,
     AssignmentSerializer,
 )
 from apps.assignments.services import (
     archive_assignment,
     close_assignment,
+    extend_assignment_deadline,
     publish_assignment,
+    reopen_assignment,
 )
 from apps.common.choices import UserRole
 
@@ -98,6 +102,50 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         closed_assignment = close_assignment(assignment, request.user)
         serializer = AssignmentSerializer(
             closed_assignment,
+            context=self.get_serializer_context(),
+        )
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="extend-deadline")
+    def extend_deadline(self, request, pk=None):
+        assignment = self.get_object()
+        input_serializer = AssignmentDeadlineActionSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        updated_assignment = extend_assignment_deadline(
+            assignment=assignment,
+            user=request.user,
+            due_at=input_serializer.validated_data["due_at"],
+            allow_late_submissions=input_serializer.validated_data.get(
+                "allow_late_submissions",
+            ),
+            late_submission_deadline=input_serializer.validated_data.get(
+                "late_submission_deadline",
+            ),
+        )
+        serializer = AssignmentSerializer(
+            updated_assignment,
+            context=self.get_serializer_context(),
+        )
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def reopen(self, request, pk=None):
+        assignment = self.get_object()
+        input_serializer = AssignmentReopenSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        updated_assignment = reopen_assignment(
+            assignment=assignment,
+            user=request.user,
+            due_at=input_serializer.validated_data.get("due_at"),
+            allow_late_submissions=input_serializer.validated_data.get(
+                "allow_late_submissions",
+            ),
+            late_submission_deadline=input_serializer.validated_data.get(
+                "late_submission_deadline",
+            ),
+        )
+        serializer = AssignmentSerializer(
+            updated_assignment,
             context=self.get_serializer_context(),
         )
         return Response(serializer.data)

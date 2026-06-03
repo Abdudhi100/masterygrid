@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { BooleanBadge } from "@/components/admin/BooleanBadge";
 import { ResourcePage } from "@/components/admin/ResourcePage";
 import type { FormState } from "@/components/admin/ResourceForm";
+import { Button } from "@/components/ui/Button";
 import { LoadingState } from "@/components/ui/LoadingState";
 import {
   createTeacherAssignment,
@@ -151,6 +153,16 @@ export default function TeacherAssignmentsPage() {
         is_active: booleanValue(values.is_active)
       })}
       fields={fields}
+      filters={
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            Assign many teachers to classes and subjects with a validated CSV import.
+          </p>
+          <Link href="/admin/imports/new?type=teacher_assignments">
+            <Button variant="secondary">Bulk import teacher assignments</Button>
+          </Link>
+        </div>
+      }
       columns={[
         {
           key: "teacher",

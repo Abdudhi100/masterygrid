@@ -235,6 +235,81 @@ class SubmissionWorkflowTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_student_cannot_start_before_start_date(self):
+        assignment = self.create_published_assignment(count=1)
+        assignment.starts_at = timezone.now() + timedelta(days=1)
+        assignment.due_at = timezone.now() + timedelta(days=2)
+        assignment.save(update_fields=["starts_at", "due_at", "updated_at"])
+
+        response = self.start_submission(assignment)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("has not started", str(response.data))
+
+    def test_student_cannot_start_after_due_when_late_not_allowed(self):
+        assignment = self.create_published_assignment(count=1)
+        assignment.due_at = timezone.now() - timedelta(hours=1)
+        assignment.save(update_fields=["due_at", "updated_at"])
+
+        response = self.start_submission(assignment)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("past its due date", str(response.data))
+
+    def test_student_can_start_and_submit_late_inside_late_window(self):
+        assignment = self.create_published_assignment(count=1)
+        assignment.due_at = timezone.now() - timedelta(hours=1)
+        assignment.allow_late_submissions = True
+        assignment.late_submission_deadline = timezone.now() + timedelta(hours=1)
+        assignment.save(
+            update_fields=[
+                "due_at",
+                "allow_late_submissions",
+                "late_submission_deadline",
+                "updated_at",
+            ]
+        )
+
+        start_response = self.start_submission(assignment)
+        submission = Submission.objects.get(assignment=assignment, student=self.student)
+        submit_response = self.client.post(
+            f"/api/submissions/{submission.id}/submit/",
+            self.answer_payload(submission),
+            format="json",
+        )
+        submission.refresh_from_db()
+
+        self.assertEqual(start_response.status_code, 200)
+        self.assertEqual(submit_response.status_code, 200)
+        self.assertTrue(submission.is_late)
+        self.assertGreater(submission.submitted_after_due_seconds, 0)
+        self.assertEqual(submission.deadline_status_at_submit, "late_open")
+
+    def test_student_cannot_submit_after_late_window_closes(self):
+        assignment = self.create_published_assignment(count=1)
+        self.start_submission(assignment)
+        submission = Submission.objects.get(assignment=assignment, student=self.student)
+        assignment.due_at = timezone.now() - timedelta(hours=2)
+        assignment.allow_late_submissions = True
+        assignment.late_submission_deadline = timezone.now() - timedelta(hours=1)
+        assignment.save(
+            update_fields=[
+                "due_at",
+                "allow_late_submissions",
+                "late_submission_deadline",
+                "updated_at",
+            ]
+        )
+
+        response = self.client.post(
+            f"/api/submissions/{submission.id}/submit/",
+            self.answer_payload(submission),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("past its due date", str(response.data))
+
     def test_student_cannot_start_another_class_assignment(self):
         assignment = self.create_published_assignment(
             class_arm=self.other_class_arm,
@@ -244,6 +319,29 @@ class SubmissionWorkflowTests(TestCase):
         response = self.start_submission(assignment)
 
         self.assertEqual(response.status_code, 400)
+
+    def test_student_assignment_list_returns_deadline_status(self):
+        assignment = self.create_published_assignment(count=1)
+        assignment.due_at = timezone.now() - timedelta(hours=1)
+        assignment.allow_late_submissions = True
+        assignment.late_submission_deadline = timezone.now() + timedelta(hours=1)
+        assignment.save(
+            update_fields=[
+                "due_at",
+                "allow_late_submissions",
+                "late_submission_deadline",
+                "updated_at",
+            ]
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get("/api/submissions/my-assignments/")
+
+        self.assertEqual(response.status_code, 200)
+        row = next(item for item in response.data if item["id"] == assignment.id)
+        self.assertEqual(row["deadline_status"], "late_open")
+        self.assertTrue(row["is_overdue"])
+        self.assertTrue(row["can_submit_now"])
 
     def test_question_order_is_stable_after_refresh(self):
         assignment = self.create_published_assignment(count=2)

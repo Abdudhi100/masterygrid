@@ -1,7 +1,18 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, viewsets
+from rest_framework import filters, status, viewsets
+from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from apps.academics.imports import (
+    build_academic_import_preflight_report,
+    process_academic_import,
+)
 from apps.academics.models import (
+    AcademicImportBatch,
     AcademicSession,
     ClassArm,
     ClassLevel,
@@ -15,6 +26,9 @@ from apps.academics.models import (
 from apps.academics.permissions import AcademicRolePermission
 from apps.academics.selectors import filter_queryset_for_user, is_platform_admin
 from apps.academics.serializers import (
+    AcademicImportBatchSerializer,
+    AcademicImportRowSerializer,
+    AcademicImportUploadSerializer,
     AcademicSessionSerializer,
     ClassArmSerializer,
     ClassLevelSerializer,
@@ -212,3 +226,110 @@ class LessonLogViewSet(AcademicBaseViewSet):
         "notes",
     ]
     ordering_fields = ["taught_at", "created_at", "updated_at"]
+
+
+def raise_drf_validation_error(exc):
+    if hasattr(exc, "message_dict"):
+        raise ValidationError(exc.message_dict)
+    if hasattr(exc, "messages"):
+        raise ValidationError(exc.messages)
+    raise ValidationError(str(exc))
+
+
+class AcademicImportQuerysetMixin:
+    def get_queryset(self):
+        queryset = AcademicImportBatch.objects.select_related(
+            "school",
+            "uploaded_by",
+        ).prefetch_related("rows")
+        user = self.request.user
+        if is_platform_admin(user):
+            return queryset
+        if user and user.is_authenticated and user.role == UserRole.SCHOOL_ADMIN:
+            return queryset.filter(school=user.school)
+        return queryset.none()
+
+
+class AcademicImportPreflightView(APIView):
+    permission_classes = [AcademicRolePermission]
+    parser_classes = [MultiPartParser, FormParser]
+    model = AcademicImportBatch
+
+    def post(self, request):
+        serializer = AcademicImportUploadSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            report = build_academic_import_preflight_report(
+                uploaded_file=serializer.validated_data["file"],
+                import_type=serializer.validated_data["import_type"],
+                school=serializer.validated_data["school"],
+            )
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+        return Response(report)
+
+
+class AcademicImportListCreateView(AcademicImportQuerysetMixin, APIView):
+    permission_classes = [AcademicRolePermission]
+    parser_classes = [MultiPartParser, FormParser]
+    model = AcademicImportBatch
+
+    def get(self, request):
+        queryset = self.get_queryset()
+        import_type = request.query_params.get("import_type")
+        if import_type:
+            queryset = queryset.filter(import_type=import_type)
+        serializer = AcademicImportBatchSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = AcademicImportUploadSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            batch = process_academic_import(
+                uploaded_file=serializer.validated_data["file"],
+                import_type=serializer.validated_data["import_type"],
+                school=serializer.validated_data["school"],
+                uploaded_by=request.user,
+            )
+        except DjangoValidationError as exc:
+            raise_drf_validation_error(exc)
+        output_serializer = AcademicImportBatchSerializer(batch)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class AcademicImportDetailView(AcademicImportQuerysetMixin, APIView):
+    permission_classes = [AcademicRolePermission]
+    model = AcademicImportBatch
+
+    def get(self, request, pk):
+        batch = get_object_or_404(self.get_queryset(), pk=pk)
+        serializer = AcademicImportBatchSerializer(batch)
+        return Response(serializer.data)
+
+
+class AcademicImportRowsView(AcademicImportQuerysetMixin, APIView):
+    permission_classes = [AcademicRolePermission]
+    model = AcademicImportBatch
+
+    def get(self, request, pk):
+        batch = get_object_or_404(self.get_queryset(), pk=pk)
+        rows = batch.rows.select_related(
+            "student_enrollment",
+            "student_enrollment__student",
+            "student_enrollment__class_arm",
+            "student_enrollment__class_arm__class_level",
+            "teacher_assignment",
+            "teacher_assignment__teacher",
+            "teacher_assignment__class_arm",
+            "teacher_assignment__class_arm__class_level",
+            "teacher_assignment__subject",
+        ).order_by("row_number")
+        serializer = AcademicImportRowSerializer(rows, many=True)
+        return Response(serializer.data)

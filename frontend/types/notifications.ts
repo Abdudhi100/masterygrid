@@ -1,6 +1,8 @@
 export type NotificationType =
   | "assignment_published"
   | "assignment_due_soon"
+  | "assignment_deadline_extended"
+  | "assignment_reopened"
   | "assignment_submitted"
   | "low_submission_rate"
   | "weak_topic_detected"

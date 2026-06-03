@@ -24,6 +24,7 @@ from apps.analytics.selectors import (
     get_teacher_student_submissions,
     get_teacher_students,
 )
+from apps.assignments.services import get_deadline_status
 from apps.common.choices import AssignmentStatus, SubmissionStatus, UserRole
 from apps.common.choices import QuestionStatus
 from apps.practice.analytics import get_student_learning_path
@@ -176,6 +177,10 @@ def get_assignment_results(teacher, assignment_id):
                 "time_spent_seconds": (
                     submission.time_spent_seconds if submission else None
                 ),
+                "is_late": bool(submission and submission.is_late),
+                "submitted_after_due_seconds": (
+                    submission.submitted_after_due_seconds if submission else None
+                ),
             }
         )
 
@@ -183,6 +188,7 @@ def get_assignment_results(teacher, assignment_id):
     total_started = len(started_submissions)
     total_submitted = len(submitted_submissions)
     total_graded = len(graded_submissions)
+    total_late = len([submission for submission in submissions if submission.is_late])
     percentages = [float(submission.percentage) for submission in graded_submissions]
     average_percentage = (
         round(sum(percentages) / len(percentages), 2) if percentages else 0.0
@@ -199,12 +205,17 @@ def get_assignment_results(teacher, assignment_id):
             "status": assignment.status,
             "question_count": assignment.question_count,
             "due_at": assignment.due_at,
+            "original_due_at": assignment.original_due_at,
+            "allow_late_submissions": assignment.allow_late_submissions,
+            "late_submission_deadline": assignment.late_submission_deadline,
+            "deadline_status": get_deadline_status(assignment),
         },
         "submission_summary": {
             "total_students_expected": total_expected,
             "total_started": total_started,
             "total_submitted": total_submitted,
             "total_graded": total_graded,
+            "total_late": total_late,
             "total_not_started": max(total_expected - total_started, 0),
             "submission_rate": (
                 round(total_submitted / total_expected * 100, 2)
@@ -1167,10 +1178,12 @@ def get_admin_assignment_compliance(user, school_id=None):
                 "topic": assignment.topic.title,
                 "status": assignment.status,
                 "due_at": assignment.due_at,
+                "deadline_status": get_deadline_status(assignment),
                 "expected_students": expected_students,
                 "started_count": started_count,
                 "submitted_count": submitted_count,
                 "graded_count": graded_count,
+                "late_submission_count": submissions.filter(is_late=True).count(),
                 "not_started_count": max(expected_students - started_count, 0),
                 "submission_rate": submission_rate,
                 "compliance_status": compliance_status,

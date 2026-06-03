@@ -2,7 +2,13 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.utils.translation import gettext_lazy as _
 
-from apps.accounts.models import StudentProfile, TeacherProfile, User
+from apps.accounts.models import (
+    StudentProfile,
+    TeacherProfile,
+    User,
+    UserImportBatch,
+    UserImportRow,
+)
 
 
 @admin.register(User)
@@ -93,5 +99,63 @@ class StudentProfileAdmin(admin.ModelAdmin):
         "admission_number",
         "guardian_name",
         "guardian_phone",
+    ]
+    readonly_fields = ["created_at", "updated_at"]
+
+
+class UserImportRowInline(admin.TabularInline):
+    model = UserImportRow
+    extra = 0
+    readonly_fields = [
+        "row_number",
+        "status",
+        "raw_data",
+        "error_message",
+        "warning_message",
+        "user",
+        "created_at",
+        "updated_at",
+    ]
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(UserImportBatch)
+class UserImportBatchAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "school",
+        "import_type",
+        "status",
+        "total_rows",
+        "successful_rows",
+        "failed_rows",
+        "duplicate_rows",
+        "warning_rows",
+        "uploaded_by",
+        "created_at",
+    ]
+    list_filter = ["school", "import_type", "status", "created_at"]
+    search_fields = [
+        "school__name",
+        "uploaded_by__email",
+        "uploaded_by__full_name",
+        "original_filename",
+    ]
+    readonly_fields = ["created_at", "updated_at"]
+    inlines = [UserImportRowInline]
+
+
+@admin.register(UserImportRow)
+class UserImportRowAdmin(admin.ModelAdmin):
+    list_display = ["batch", "row_number", "status", "user", "created_at"]
+    list_filter = ["status", "batch__import_type", "batch__school"]
+    search_fields = [
+        "user__email",
+        "user__full_name",
+        "error_message",
+        "warning_message",
     ]
     readonly_fields = ["created_at", "updated_at"]

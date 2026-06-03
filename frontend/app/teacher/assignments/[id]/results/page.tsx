@@ -241,6 +241,7 @@ export default function AssignmentResultsPage({
         <StatCard label="Started" value={summary.total_started} />
         <StatCard label="Submitted" value={summary.total_submitted} />
         <StatCard label="Graded" value={summary.total_graded} />
+        <StatCard label="Late" value={summary.total_late} />
         <StatCard label="Not started" value={summary.total_not_started} />
         <StatCard
           label="Submission rate"
@@ -327,6 +328,18 @@ export default function AssignmentResultsPage({
                   key: "submitted_at",
                   header: "Submitted at",
                   render: (row) => formatDate(row.submitted_at, "Not submitted")
+                },
+                {
+                  key: "is_late",
+                  header: "Late",
+                  render: (row) =>
+                    row.is_late ? (
+                      <Badge tone="warning" data-testid="submission-late-badge">
+                        Late
+                      </Badge>
+                    ) : (
+                      <Badge tone="neutral">On time</Badge>
+                    )
                 },
                 {
                   key: "time_spent_seconds",

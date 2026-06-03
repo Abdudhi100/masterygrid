@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from apps.assignments.models import Assignment, AssignmentQuestion
+from apps.assignments.services import get_assignment_availability, get_deadline_status
 from apps.common.choices import SubmissionStatus
 from apps.question_bank.models import QuestionOption
 from apps.question_bank.serializers import StudentQuestionMediaSerializer
@@ -80,6 +81,20 @@ class SubmissionSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source="assignment.subject.name", read_only=True)
     topic_title = serializers.CharField(source="assignment.topic.title", read_only=True)
     class_arm_name = serializers.SerializerMethodField()
+    deadline_status = serializers.SerializerMethodField()
+    assignment_due_at = serializers.DateTimeField(source="assignment.due_at", read_only=True)
+    assignment_original_due_at = serializers.DateTimeField(
+        source="assignment.original_due_at",
+        read_only=True,
+    )
+    assignment_allow_late_submissions = serializers.BooleanField(
+        source="assignment.allow_late_submissions",
+        read_only=True,
+    )
+    assignment_late_submission_deadline = serializers.DateTimeField(
+        source="assignment.late_submission_deadline",
+        read_only=True,
+    )
 
     class Meta:
         model = Submission
@@ -101,6 +116,14 @@ class SubmissionSerializer(serializers.ModelSerializer):
             "total_marks",
             "percentage",
             "time_spent_seconds",
+            "is_late",
+            "submitted_after_due_seconds",
+            "deadline_status_at_submit",
+            "deadline_status",
+            "assignment_due_at",
+            "assignment_original_due_at",
+            "assignment_allow_late_submissions",
+            "assignment_late_submission_deadline",
             "created_at",
             "updated_at",
         ]
@@ -108,6 +131,9 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
     def get_class_arm_name(self, obj):
         return str(obj.assignment.class_arm)
+
+    def get_deadline_status(self, obj):
+        return get_deadline_status(obj.assignment, submission=obj)
 
 
 class SubmissionStartInputSerializer(serializers.Serializer):
@@ -276,6 +302,16 @@ class StudentAssignmentListSerializer(serializers.ModelSerializer):
     class_arm_name = serializers.SerializerMethodField()
     submission_id = serializers.SerializerMethodField()
     submission_status = serializers.SerializerMethodField()
+    original_due_at = serializers.DateTimeField(read_only=True)
+    allow_late_submissions = serializers.BooleanField(read_only=True)
+    late_submission_deadline = serializers.DateTimeField(read_only=True)
+    deadline_extended_at = serializers.DateTimeField(read_only=True)
+    deadline_status = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+    is_due_soon = serializers.SerializerMethodField()
+    can_submit_now = serializers.SerializerMethodField()
+    is_late = serializers.SerializerMethodField()
+    submitted_after_due_seconds = serializers.SerializerMethodField()
 
     class Meta:
         model = Assignment
@@ -290,9 +326,19 @@ class StudentAssignmentListSerializer(serializers.ModelSerializer):
             "duration_minutes",
             "starts_at",
             "due_at",
+            "original_due_at",
+            "allow_late_submissions",
+            "late_submission_deadline",
+            "deadline_extended_at",
+            "deadline_status",
+            "is_overdue",
+            "is_due_soon",
+            "can_submit_now",
             "status",
             "submission_id",
             "submission_status",
+            "is_late",
+            "submitted_after_due_seconds",
         ]
         read_only_fields = fields
 
@@ -316,3 +362,30 @@ class StudentAssignmentListSerializer(serializers.ModelSerializer):
     def get_submission_status(self, obj):
         submission = self._get_submission(obj)
         return submission.status if submission else None
+
+    def get_deadline_status(self, obj):
+        return get_deadline_status(obj, submission=self._get_submission(obj))
+
+    def get_is_overdue(self, obj):
+        return get_assignment_availability(obj)["is_overdue"]
+
+    def get_is_due_soon(self, obj):
+        return get_assignment_availability(obj)["is_due_soon"]
+
+    def get_can_submit_now(self, obj):
+        submission = self._get_submission(obj)
+        if submission and submission.status in {
+            SubmissionStatus.SUBMITTED,
+            SubmissionStatus.GRADED,
+            SubmissionStatus.AUTO_SUBMITTED,
+        }:
+            return False
+        return get_assignment_availability(obj)["can_submit_now"]
+
+    def get_is_late(self, obj):
+        submission = self._get_submission(obj)
+        return bool(submission and submission.is_late)
+
+    def get_submitted_after_due_seconds(self, obj):
+        submission = self._get_submission(obj)
+        return submission.submitted_after_due_seconds if submission else None

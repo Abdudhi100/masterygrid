@@ -13,6 +13,7 @@ export const adminNavItems: NavItem[] = [
   { label: "Students", href: "/admin/students" },
   { label: "Teacher Assignments", href: "/admin/teacher-assignments" },
   { label: "Student Enrollments", href: "/admin/student-enrollments" },
+  { label: "Bulk Import", href: "/admin/imports" },
   { label: "Question Bank", href: "/admin/question-bank" },
   { label: "AI Suggestions", href: "/admin/question-bank/ai-suggestions" },
   { label: "Question Imports", href: "/admin/question-bank/imports" },

@@ -29,6 +29,8 @@ class AssignmentPermission(BasePermission):
             "publish",
             "close",
             "archive",
+            "extend_deadline",
+            "reopen",
         }:
             return user.role in {UserRole.SCHOOL_ADMIN, UserRole.TEACHER}
 
@@ -52,7 +54,14 @@ class AssignmentPermission(BasePermission):
             if request.method in SAFE_METHODS:
                 return True
 
-            if getattr(view, "action", None) in {"publish", "close", "archive", "destroy"}:
+            if getattr(view, "action", None) in {
+                "publish",
+                "close",
+                "archive",
+                "destroy",
+                "extend_deadline",
+                "reopen",
+            }:
                 return True
 
             return obj.status == AssignmentStatus.DRAFT

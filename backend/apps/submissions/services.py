@@ -6,6 +6,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.academics.models import StudentEnrollment
+from apps.assignments.services import (
+    get_deadline_status,
+    is_assignment_open_for_student,
+    is_assignment_overdue,
+)
 from apps.common.choices import AssignmentStatus, SubmissionStatus, UserRole
 from apps.submissions.models import StudentAnswer, Submission
 
@@ -36,8 +41,10 @@ def validate_student_can_start_assignment(student, assignment):
     if assignment.starts_at and assignment.starts_at > now:
         raise ValidationError({"assignment": "This assignment has not started yet."})
 
-    if assignment.due_at and assignment.due_at < now:
-        raise ValidationError({"assignment": "This assignment is past its due date."})
+    if not is_assignment_open_for_student(assignment, now=now):
+        if assignment.due_at and assignment.due_at < now:
+            raise ValidationError({"assignment": "This assignment is past its due date."})
+        raise ValidationError({"assignment": "This assignment is not open for submission."})
 
     is_enrolled = StudentEnrollment.objects.filter(
         school=assignment.school,
@@ -226,12 +233,29 @@ def submit_assignment(submission, answers):
         raise ValidationError({"assignment": "Assignment is no longer accepting submissions."})
 
     now = timezone.now()
-    if submission.assignment.due_at and submission.assignment.due_at < now:
-        raise ValidationError({"assignment": "This assignment is past its due date."})
+    if not is_assignment_open_for_student(submission.assignment, now=now):
+        if submission.assignment.due_at and submission.assignment.due_at < now:
+            raise ValidationError({"assignment": "This assignment is past its due date."})
+        raise ValidationError({"assignment": "Assignment is no longer accepting submissions."})
 
     save_submission_answers(submission, answers)
 
     submission.submitted_at = now
+    late_reference_due_at = (
+        submission.assignment.original_due_at or submission.assignment.due_at
+    )
+    submission.is_late = bool(late_reference_due_at and late_reference_due_at < now)
+    submission.deadline_status_at_submit = get_deadline_status(
+        submission.assignment,
+        now=now,
+    )
+    if submission.is_late and late_reference_due_at:
+        submission.submitted_after_due_seconds = max(
+            1,
+            int((now - late_reference_due_at).total_seconds()),
+        )
+    else:
+        submission.submitted_after_due_seconds = None
     if submission.started_at:
         elapsed_seconds = int((now - submission.started_at).total_seconds())
         submission.time_spent_seconds = max(1, elapsed_seconds)
@@ -240,6 +264,9 @@ def submit_assignment(submission, answers):
         update_fields=[
             "submitted_at",
             "time_spent_seconds",
+            "is_late",
+            "submitted_after_due_seconds",
+            "deadline_status_at_submit",
             "status",
             "updated_at",
         ]

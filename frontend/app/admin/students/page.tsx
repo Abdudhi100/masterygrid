@@ -58,6 +58,16 @@ export default function StudentsPage() {
         { name: "guardian_name", label: "Guardian name", type: "text" },
         { name: "guardian_phone", label: "Guardian phone", type: "text" }
       ]}
+      filters={
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            Onboarding many students? Validate a CSV before creating accounts.
+          </p>
+          <Link href="/admin/imports/new?type=students">
+            <Button variant="secondary">Bulk import students</Button>
+          </Link>
+        </div>
+      }
       columns={[
         { key: "full_name", header: "Name", render: (row) => row.full_name },
         { key: "email", header: "Email", render: (row) => row.email },

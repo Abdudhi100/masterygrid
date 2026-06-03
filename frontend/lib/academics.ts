@@ -2,7 +2,9 @@ import { api } from "@/lib/api";
 import type {
   AcademicSession,
   Assignment,
+  AssignmentDeadlinePayload,
   AssignmentGeneratePayload,
+  AssignmentReopenPayload,
   ClassArm,
   ClassLevel,
   LessonLog,
@@ -168,6 +170,14 @@ export const publishAssignment = (id: number | string) =>
   api.post<Assignment>(`/assignments/${id}/publish/`);
 export const closeAssignment = (id: number | string) =>
   api.post<Assignment>(`/assignments/${id}/close/`);
+export const extendAssignmentDeadline = (
+  id: number | string,
+  payload: AssignmentDeadlinePayload
+) => api.post<Assignment>(`/assignments/${id}/extend-deadline/`, payload);
+export const reopenAssignment = (
+  id: number | string,
+  payload: AssignmentReopenPayload
+) => api.post<Assignment>(`/assignments/${id}/reopen/`, payload);
 export const archiveAssignment = (id: number | string) =>
   api.post<Assignment>(`/assignments/${id}/archive/`);
 
@@ -177,9 +187,9 @@ export const registerStudent = (payload: RegisterUserPayload) =>
   api.post<User>("/auth/register/", payload);
 
 export const getTeachers = (params?: UserListParams) =>
-  listResource<Teacher>(`/auth/teachers/${queryString(params)}`);
+  listAllResource<Teacher>("/auth/teachers/", params);
 export const getStudents = (params?: UserListParams) =>
-  listResource<Student>(`/auth/students/${queryString(params)}`);
+  listAllResource<Student>("/auth/students/", params);
 
 export const getTeacherProfiles = (params?: UserListParams) =>
   listResource<TeacherProfile>(`/auth/teacher-profiles/${queryString(params)}`);

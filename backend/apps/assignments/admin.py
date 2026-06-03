@@ -23,6 +23,8 @@ class AssignmentAdmin(admin.ModelAdmin):
         "status",
         "published_at",
         "due_at",
+        "allow_late_submissions",
+        "late_submission_deadline",
     ]
     list_filter = [
         "school",
@@ -33,6 +35,8 @@ class AssignmentAdmin(admin.ModelAdmin):
         "status",
         "starts_at",
         "due_at",
+        "allow_late_submissions",
+        "late_submission_deadline",
     ]
     search_fields = [
         "title",
@@ -44,7 +48,14 @@ class AssignmentAdmin(admin.ModelAdmin):
         "topic__title",
         "school__name",
     ]
-    readonly_fields = ["published_at", "created_at", "updated_at"]
+    readonly_fields = [
+        "published_at",
+        "original_due_at",
+        "deadline_extended_at",
+        "deadline_extended_by",
+        "created_at",
+        "updated_at",
+    ]
     autocomplete_fields = [
         "school",
         "teacher",

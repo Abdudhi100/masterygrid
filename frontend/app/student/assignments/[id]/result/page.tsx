@@ -118,6 +118,18 @@ function ResultContent() {
             {timeSpent(result.time_spent_seconds)}
           </p>
         </Card>
+        <Card>
+          <p className="text-sm font-medium text-muted">Deadline status</p>
+          <p className="mt-2">
+            {result.is_late ? (
+              <Badge tone="warning" data-testid="submission-late-badge">
+                Submitted late
+              </Badge>
+            ) : (
+              <Badge tone="success">On time</Badge>
+            )}
+          </p>
+        </Card>
       </section>
 
       <section className="mt-6 space-y-4">

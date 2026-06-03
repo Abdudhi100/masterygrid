@@ -1,18 +1,24 @@
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.academics.models import (
+    AcademicSession,
     ClassArm,
     ClassLevel,
+    StudentEnrollment,
     Subject,
     TeacherClassSubjectAssignment,
     Topic,
 )
 from apps.accounts.models import User
 from apps.assignments.models import Assignment
-from apps.assignments.services import create_assignment_from_topic
+from apps.assignments.services import create_assignment_from_topic, publish_assignment
 from apps.common.choices import AssignmentStatus, QuestionStatus, UserRole
+from apps.notifications.models import Notification, NotificationType
 from apps.question_bank.models import Question
 from apps.schools.models import School
 
@@ -51,6 +57,20 @@ class AssignmentEngineTests(TestCase):
             full_name="Other Admin",
             role=UserRole.SCHOOL_ADMIN,
             school=self.other_school,
+        )
+        self.student = User.objects.create_user(
+            email="student@example.com",
+            password="StrongPass123",
+            full_name="Demo Student",
+            role=UserRole.STUDENT,
+            school=self.school,
+        )
+        self.session = AcademicSession.objects.create(
+            school=self.school,
+            name="2026/2027",
+            starts_at="2026-09-01",
+            ends_at="2027-07-31",
+            is_active=True,
         )
         self.class_level = ClassLevel.objects.create(
             school=self.school,
@@ -250,3 +270,103 @@ class AssignmentEngineTests(TestCase):
         assignment = Assignment.objects.get(id=response.data["id"])
         self.assertEqual(assignment.status, AssignmentStatus.DRAFT)
         self.assertEqual(assignment.assignment_questions.count(), 1)
+
+    def test_extend_deadline_preserves_original_due_and_notifies_students(self):
+        self.assign_teacher()
+        StudentEnrollment.objects.create(
+            school=self.school,
+            student=self.student,
+            class_arm=self.class_arm,
+            academic_session=self.session,
+        )
+        self.create_question()
+        assignment = create_assignment_from_topic(
+            teacher=self.teacher,
+            class_arm=self.class_arm,
+            subject=self.subject,
+            topic=self.topic,
+            title="Quadratic Practice",
+            question_count=1,
+            due_at=timezone.now() + timedelta(days=1),
+        )
+        assignment = publish_assignment(assignment, self.teacher)
+        original_due_at = assignment.due_at
+        Notification.objects.all().delete()
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.post(
+            f"/api/assignments/{assignment.id}/extend-deadline/",
+            {
+                "due_at": (timezone.now() + timedelta(days=3)).isoformat(),
+                "allow_late_submissions": True,
+                "late_submission_deadline": (
+                    timezone.now() + timedelta(days=4)
+                ).isoformat(),
+            },
+            format="json",
+        )
+        assignment.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(assignment.original_due_at, original_due_at)
+        self.assertTrue(assignment.allow_late_submissions)
+        self.assertEqual(assignment.deadline_extended_by, self.teacher)
+        notification = Notification.objects.get(recipient=self.student)
+        self.assertEqual(
+            notification.notification_type,
+            NotificationType.ASSIGNMENT_DEADLINE_EXTENDED,
+        )
+
+    def test_reopen_closed_assignment_sets_published_status(self):
+        self.assign_teacher()
+        self.create_question()
+        assignment = publish_assignment(
+            create_assignment_from_topic(
+                teacher=self.teacher,
+                class_arm=self.class_arm,
+                subject=self.subject,
+                topic=self.topic,
+                title="Quadratic Practice",
+                question_count=1,
+                due_at=timezone.now() + timedelta(days=1),
+            ),
+            self.teacher,
+        )
+        assignment.status = AssignmentStatus.CLOSED
+        assignment.save(update_fields=["status", "updated_at"])
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.post(
+            f"/api/assignments/{assignment.id}/reopen/",
+            {"due_at": (timezone.now() + timedelta(days=2)).isoformat()},
+            format="json",
+        )
+        assignment.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(assignment.status, AssignmentStatus.PUBLISHED)
+
+    def test_cross_school_user_cannot_extend_assignment(self):
+        self.assign_teacher()
+        self.create_question()
+        assignment = publish_assignment(
+            create_assignment_from_topic(
+                teacher=self.teacher,
+                class_arm=self.class_arm,
+                subject=self.subject,
+                topic=self.topic,
+                title="Quadratic Practice",
+                question_count=1,
+                due_at=timezone.now() + timedelta(days=1),
+            ),
+            self.teacher,
+        )
+        self.client.force_authenticate(self.other_school_admin)
+
+        response = self.client.post(
+            f"/api/assignments/{assignment.id}/extend-deadline/",
+            {"due_at": (timezone.now() + timedelta(days=2)).isoformat()},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)

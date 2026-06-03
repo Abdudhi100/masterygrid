@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.common.choices import AssignmentStatus, QuestionStatus, UserRole
@@ -50,6 +50,21 @@ class Assignment(TimeStampedModel):
     )
     starts_at = models.DateTimeField(null=True, blank=True)
     due_at = models.DateTimeField(null=True, blank=True)
+    original_due_at = models.DateTimeField(null=True, blank=True)
+    allow_late_submissions = models.BooleanField(default=False)
+    late_submission_deadline = models.DateTimeField(null=True, blank=True)
+    deadline_extended_at = models.DateTimeField(null=True, blank=True)
+    deadline_extended_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="assignment_deadline_extensions",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    late_penalty_percent = models.PositiveIntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
     status = models.CharField(
         max_length=16,
         choices=AssignmentStatus.choices,
@@ -75,6 +90,29 @@ class Assignment(TimeStampedModel):
 
         if self.starts_at and self.due_at and self.starts_at > self.due_at:
             raise ValidationError({"due_at": "Due date must be after start date."})
+
+        if self.late_submission_deadline:
+            if not self.due_at:
+                raise ValidationError(
+                    {"late_submission_deadline": "A due date is required for a late deadline."}
+                )
+            if self.late_submission_deadline <= self.due_at:
+                raise ValidationError(
+                    {
+                        "late_submission_deadline": (
+                            "Late submission deadline must be after the due date."
+                        )
+                    }
+                )
+
+        if not self.allow_late_submissions and self.late_submission_deadline:
+            raise ValidationError(
+                {
+                    "late_submission_deadline": (
+                        "Late submissions must be enabled before setting a late deadline."
+                    )
+                }
+            )
 
         required_relations = [
             self.school_id,

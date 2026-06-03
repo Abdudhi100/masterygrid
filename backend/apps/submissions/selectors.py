@@ -1,6 +1,5 @@
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 
 from apps.academics.models import StudentEnrollment
 from apps.assignments.models import Assignment
@@ -63,14 +62,12 @@ def get_student_assignments(user):
         is_active=True,
     ).values("class_arm_id")
 
-    now = timezone.now()
     return (
         Assignment.objects.filter(
             school=user.school,
             class_arm_id__in=enrolled_class_arms,
             status=AssignmentStatus.PUBLISHED,
         )
-        .filter(Q(due_at__isnull=True) | Q(due_at__gte=now))
         .select_related("class_arm", "class_arm__class_level", "subject", "topic")
         .prefetch_related(
             Prefetch(

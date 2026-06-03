@@ -14,6 +14,7 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QuestionMediaDisplay } from "@/components/question-bank/QuestionMediaDisplay";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -232,6 +233,18 @@ function AttemptContent({ assignmentId }: { assignmentId: string }) {
           </p>
         </div>
       </Card>
+
+      {assignment?.deadline_status === "late_open" ? (
+        <div
+          className="mb-4 rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-warning"
+          data-testid="student-late-submission-warning"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="warning">Late submission</Badge>
+            <span>This submission may be marked late.</span>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mb-4 rounded-md border border-red-100 bg-red-50 px-4 py-3 text-sm text-danger">

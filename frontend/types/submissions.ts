@@ -1,4 +1,5 @@
 import type { QuestionMedia } from "@/types/questionBank";
+import type { AssignmentDeadlineStatus } from "@/types/academics";
 
 export type SubmissionStatus =
   | "not_started"
@@ -18,9 +19,19 @@ export type StudentAssignmentItem = {
   duration_minutes: number | null;
   starts_at: string | null;
   due_at: string | null;
+  original_due_at: string | null;
+  allow_late_submissions: boolean;
+  late_submission_deadline: string | null;
+  deadline_extended_at: string | null;
+  deadline_status: AssignmentDeadlineStatus;
+  is_overdue: boolean;
+  is_due_soon: boolean;
+  can_submit_now: boolean;
   status: string;
   submission_id: number | null;
   submission_status: SubmissionStatus | null;
+  is_late: boolean;
+  submitted_after_due_seconds: number | null;
 };
 
 export type SubmissionQuestionOption = {
@@ -56,6 +67,14 @@ export type Submission = {
   total_marks: number;
   percentage: string | number;
   time_spent_seconds: number | null;
+  is_late: boolean;
+  submitted_after_due_seconds: number | null;
+  deadline_status_at_submit: AssignmentDeadlineStatus | "";
+  deadline_status: AssignmentDeadlineStatus;
+  assignment_due_at: string | null;
+  assignment_original_due_at: string | null;
+  assignment_allow_late_submissions: boolean;
+  assignment_late_submission_deadline: string | null;
   created_at: string;
   updated_at: string;
 };

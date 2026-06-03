@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
+
 import { BooleanBadge } from "@/components/admin/BooleanBadge";
 import { ResourcePage } from "@/components/admin/ResourcePage";
 import type { FormState } from "@/components/admin/ResourceForm";
+import { Button } from "@/components/ui/Button";
 import { getTeachers, registerTeacher } from "@/lib/academics";
 import { stringValue } from "@/lib/formPayload";
 import { useAuth } from "@/hooks/useAuth";
@@ -47,6 +50,16 @@ export default function TeachersPage() {
         { name: "staff_id", label: "Staff ID", type: "text", required: true },
         { name: "phone_number", label: "Phone number", type: "text" }
       ]}
+      filters={
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            Onboarding many teachers? Validate a CSV before creating accounts.
+          </p>
+          <Link href="/admin/imports/new?type=teachers">
+            <Button variant="secondary">Bulk import teachers</Button>
+          </Link>
+        </div>
+      }
       columns={[
         { key: "full_name", header: "Name", render: (row) => row.full_name },
         { key: "email", header: "Email", render: (row) => row.email },

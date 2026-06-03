@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { BooleanBadge } from "@/components/admin/BooleanBadge";
 import { ResourcePage } from "@/components/admin/ResourcePage";
 import type { FormState } from "@/components/admin/ResourceForm";
+import { Button } from "@/components/ui/Button";
 import { LoadingState } from "@/components/ui/LoadingState";
 import {
   createStudentEnrollment,
@@ -132,6 +134,16 @@ export default function StudentEnrollmentsPage() {
         is_active: booleanValue(values.is_active)
       })}
       fields={fields}
+      filters={
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            Enroll many students at once with a validated CSV import.
+          </p>
+          <Link href="/admin/imports/new?type=student_enrollments">
+            <Button variant="secondary">Bulk import enrollments</Button>
+          </Link>
+        </div>
+      }
       columns={[
         {
           key: "student",

@@ -10,6 +10,10 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ApiError } from "@/lib/api";
+import {
+  deadlineStatusTone,
+  formatDeadlineStatus
+} from "@/lib/assignmentDeadlines";
 import { getMyAssignments, startAssignment } from "@/lib/submissions";
 import type { StudentAssignmentItem } from "@/types/submissions";
 
@@ -111,8 +115,12 @@ export default function StudentAssignmentDetailPage({
             <p>
               <span className="block font-semibold text-ink">Status</span>
               <span className="mt-1 inline-block">
-                <Badge tone={isCompleted(assignment) ? "success" : "brand"}>
-                  {assignment.submission_status ?? "pending"}
+                <Badge
+                  tone={deadlineStatusTone(assignment.deadline_status)}
+                  data-testid="student-assignment-deadline-badge"
+                >
+                  {assignment.submission_status ??
+                    formatDeadlineStatus(assignment.deadline_status)}
                 </Badge>
               </span>
             </p>
@@ -129,6 +137,12 @@ export default function StudentAssignmentDetailPage({
             <p>
               <span className="block font-semibold text-ink">Due date</span>
               {formatDate(assignment.due_at)}
+            </p>
+            <p>
+              <span className="block font-semibold text-ink">Late submissions</span>
+              {assignment.allow_late_submissions
+                ? `Allowed until ${formatDate(assignment.late_submission_deadline)}`
+                : "Not allowed"}
             </p>
           </div>
           <div>
@@ -149,9 +163,10 @@ export default function StudentAssignmentDetailPage({
               <Button
                 onClick={handleStart}
                 isLoading={isStarting}
+                disabled={!assignment.can_submit_now}
                 data-testid="assignment-start-button"
               >
-                Start Assignment
+                {assignment.can_submit_now ? "Start Assignment" : "Unavailable"}
               </Button>
             )}
           </div>
