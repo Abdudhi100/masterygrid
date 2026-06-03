@@ -217,3 +217,23 @@ class CanSearchApprovedQuestions(BasePermission):
             )
 
         return False
+
+
+class CanViewQuestionQualityDashboard(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if is_platform_admin(user):
+            return True
+        return user.role == UserRole.SCHOOL_ADMIN and bool(user.school_id)
+
+
+class CanBulkReviewQuestions(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if is_platform_admin(user):
+            return True
+        return user.role == UserRole.SCHOOL_ADMIN and bool(user.school_id)

@@ -11,6 +11,7 @@ from apps.common.choices import QuestionStatus, UserRole
 from apps.question_bank.models import (
     Question,
     QuestionImportBatch,
+    QuestionImportRow,
     QuestionImportRowStatus,
     QuestionMedia,
     QuestionOption,
@@ -136,6 +137,10 @@ class QuestionBankTests(TestCase):
         is_active=True,
         question_text="Stored question?",
         created_by=None,
+        explanation="",
+        has_diagram=False,
+        needs_manual_review=False,
+        content_hash="",
     ):
         question = Question.objects.create(
             school=self.school,
@@ -144,9 +149,13 @@ class QuestionBankTests(TestCase):
             class_level=self.class_level,
             source=self.source,
             question_text=question_text,
+            explanation=explanation,
+            content_hash=content_hash,
             difficulty=difficulty,
             status=status,
             is_active=is_active,
+            has_diagram=has_diagram,
+            needs_manual_review=needs_manual_review,
             created_by=created_by or self.teacher,
         )
         for label, text, is_correct in [
@@ -162,6 +171,25 @@ class QuestionBankTests(TestCase):
                 is_correct=is_correct,
             )
         return question
+
+    def create_import_batch_for_question(self, question):
+        batch = QuestionImportBatch.objects.create(
+            school=self.school,
+            uploaded_by=self.school_admin,
+            source=self.source,
+            title="E2E Quality Import",
+            original_filename="questions.csv",
+            file_type="csv",
+        )
+        QuestionImportRow.objects.create(
+            batch=batch,
+            row_number=2,
+            raw_data={"question_text": question.question_text},
+            status=QuestionImportRowStatus.IMPORTED,
+            question=question,
+            content_hash=question.content_hash,
+        )
+        return batch
 
     def payload(self, **overrides):
         data = {
@@ -910,3 +938,92 @@ class QuestionBankTests(TestCase):
         response = self.client.get("/api/question-bank/questions/search-approved/")
 
         self.assertEqual(response.status_code, 403)
+
+    def test_quality_dashboard_reports_core_sections(self):
+        missing_explanation = self.create_stored_question(
+            question_text="E2E quality missing explanation?",
+            explanation="",
+        )
+        self.create_import_batch_for_question(missing_explanation)
+        diagram_issue = self.create_stored_question(
+            question_text="E2E quality diagram issue?",
+            explanation="Diagram question explanation.",
+            has_diagram=True,
+            needs_manual_review=True,
+        )
+        ready_question = self.create_stored_question(
+            question_text="E2E quality ready for approval?",
+            explanation="Ready question explanation.",
+        )
+        duplicate_one = self.create_stored_question(
+            question_text="E2E duplicate question one?",
+            explanation="Duplicate explanation.",
+            content_hash="duplicate-hash",
+        )
+        duplicate_two = self.create_stored_question(
+            question_text="E2E duplicate question two?",
+            explanation="Duplicate explanation.",
+            content_hash="duplicate-hash",
+        )
+
+        self.client.force_authenticate(self.school_admin)
+        response = self.client.get("/api/question-bank/quality-dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(response.data["summary"]["draft_count"], 5)
+        self.assertGreaterEqual(response.data["summary"]["missing_explanation_count"], 1)
+        self.assertGreaterEqual(response.data["summary"]["diagram_issue_count"], 1)
+        self.assertGreaterEqual(response.data["summary"]["duplicate_suspect_count"], 2)
+        ready_ids = [
+            row["id"] for row in response.data["sections"]["ready_for_approval"]
+        ]
+        self.assertIn(ready_question.id, ready_ids)
+        imported_ids = [row["id"] for row in response.data["sections"]["imported_drafts"]]
+        self.assertIn(missing_explanation.id, imported_ids)
+        diagram_ids = [row["id"] for row in response.data["sections"]["diagram_issues"]]
+        self.assertIn(diagram_issue.id, diagram_ids)
+        duplicate_ids = [row["id"] for row in response.data["sections"]["duplicate_suspects"]]
+        self.assertIn(duplicate_one.id, duplicate_ids)
+        self.assertIn(duplicate_two.id, duplicate_ids)
+
+    def test_quality_dashboard_blocks_students_and_teachers(self):
+        for user in [self.student, self.teacher]:
+            self.client.force_authenticate(user)
+            response = self.client.get("/api/question-bank/quality-dashboard/")
+            self.assertEqual(response.status_code, 403)
+
+    def test_bulk_approve_ready_question(self):
+        ready_question = self.create_stored_question(
+            question_text="E2E bulk approve ready?",
+            explanation="Ready question explanation.",
+        )
+        self.client.force_authenticate(self.school_admin)
+
+        response = self.client.post(
+            "/api/question-bank/questions/bulk-action/",
+            {"question_ids": [ready_question.id], "action": "approve"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"][0]["status"], "success")
+        ready_question.refresh_from_db()
+        self.assertEqual(ready_question.status, QuestionStatus.APPROVED)
+
+    def test_bulk_approve_rejects_question_with_quality_issue(self):
+        missing_explanation = self.create_stored_question(
+            question_text="E2E bulk approve not ready?",
+            explanation="",
+        )
+        self.client.force_authenticate(self.school_admin)
+
+        response = self.client.post(
+            "/api/question-bank/questions/bulk-action/",
+            {"question_ids": [missing_explanation.id], "action": "approve"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"][0]["status"], "failed")
+        missing_explanation.refresh_from_db()
+        self.assertEqual(missing_explanation.status, QuestionStatus.DRAFT)

@@ -161,7 +161,7 @@ tests to create data against a production-like target.
 The E2E workflow can run in two modes:
 
 - `smoke`: runs only `01-auth-smoke.spec.ts`.
-- `full`: runs `01`, `02`, `03`, `04`, `05`, `06`, `07`, `08`, `09`, `10`, `11`, `12`, `13`, and `14`, including
+- `full`: runs `01` through `17`, including
   seeded/mutating tests.
 
 Pushes to `main` run smoke E2E only when the required secrets exist. If secrets
@@ -402,6 +402,14 @@ Additional seeded workflow suites:
   assignment, confirms the student is blocked, extends the deadline with late
   submissions enabled, and verifies the late result appears for student and
   teacher.
+- `15-bulk-user-import-flow.spec.ts`: school admin validates and imports
+  synthetic student and teacher CSVs, then verifies the imported users appear.
+- `16-question-quality-dashboard.spec.ts`: school admin reviews question-bank
+  quality queues, opens a flagged draft question, and bulk approves a ready
+  question.
+- `17-school-setup-wizard.spec.ts`: school admin opens the setup wizard, seeds
+  minimum workflow data, confirms core onboarding steps are complete, and follows
+  a setup action link.
 
 ## Login Debugging
 

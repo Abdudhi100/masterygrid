@@ -128,6 +128,9 @@ export default function QuestionImportDetailPage({
             <Link href="/admin/question-bank?status=draft">
               <Button variant="secondary">View Imported Draft Questions</Button>
             </Link>
+            <Link href="/admin/question-bank/quality">
+              <Button variant="secondary">Question Quality</Button>
+            </Link>
             <Link href="/admin/question-bank">
               <Button>Go to Question Bank</Button>
             </Link>

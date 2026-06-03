@@ -2,11 +2,15 @@ import { api } from "@/lib/api";
 import type { ListResponse } from "@/types/academics";
 import type {
   Question,
+  QuestionBulkAction,
+  QuestionBulkActionResponse,
   QuestionFilters,
   QuestionImportBatch,
   QuestionImportFilters,
   QuestionImportPreflightResponse,
   QuestionImportRow,
+  QuestionQualityDashboard,
+  QuestionQualityFilters,
   QuestionMedia,
   QuestionMediaPayload,
   QuestionPayload,
@@ -76,6 +80,20 @@ export const rejectQuestion = (id: number | string) =>
 
 export const archiveQuestion = (id: number | string) =>
   api.post<Question>(`/question-bank/questions/${id}/archive/`);
+
+export const bulkQuestionAction = (
+  questionIds: number[],
+  action: QuestionBulkAction
+) =>
+  api.post<QuestionBulkActionResponse>("/question-bank/questions/bulk-action/", {
+    question_ids: questionIds,
+    action
+  });
+
+export const getQuestionQualityDashboard = (params?: QuestionQualityFilters) =>
+  api.get<QuestionQualityDashboard>(
+    `/question-bank/quality-dashboard/${queryString(params)}`
+  );
 
 export const getQuestionMedia = (questionId: number | string) =>
   api.get<QuestionMedia[]>(`/question-bank/questions/${questionId}/media/`);

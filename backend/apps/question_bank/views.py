@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.common.choices import QuestionStatus, UserRole
 from apps.question_bank.filters import QuestionFilter
@@ -17,8 +18,10 @@ from apps.question_bank.models import (
     QuestionSource,
 )
 from apps.question_bank.permissions import (
+    CanBulkReviewQuestions,
     CanImportQuestions,
     CanSearchApprovedQuestions,
+    CanViewQuestionQualityDashboard,
     CanViewQuestionImports,
     QuestionBankPermission,
     QuestionMediaPermission,
@@ -27,14 +30,21 @@ from apps.question_bank.permissions import (
 from apps.question_bank.selectors import get_question_queryset_for_user, is_platform_admin
 from apps.question_bank.serializers import (
     ApprovedQuestionSearchSerializer,
+    QuestionBulkActionSerializer,
     QuestionImportBatchSerializer,
     QuestionImportCreateSerializer,
     QuestionImportPreflightUploadSerializer,
     QuestionImportRowSerializer,
     QuestionCreateUpdateSerializer,
+    QuestionQualityDashboardQuerySerializer,
+    QuestionQualityDashboardSerializer,
     QuestionMediaSerializer,
     QuestionSerializer,
     QuestionSourceSerializer,
+)
+from apps.question_bank.quality import (
+    build_question_quality_dashboard,
+    is_ready_for_approval,
 )
 from apps.question_bank.services import (
     approve_question,
@@ -81,6 +91,8 @@ class QuestionViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == "search_approved":
             return [CanSearchApprovedQuestions()]
+        if self.action == "bulk_action":
+            return [CanBulkReviewQuestions()]
         return super().get_permissions()
 
     def get_queryset(self):
@@ -242,6 +254,89 @@ class QuestionViewSet(viewsets.ModelViewSet):
                 "results": question_serializer.data,
             }
         )
+
+    @action(detail=False, methods=["post"], url_path="bulk-action")
+    def bulk_action(self, request):
+        serializer = QuestionBulkActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        question_ids = serializer.validated_data["question_ids"]
+        action_name = serializer.validated_data["action"]
+        action_past_tense = {
+            "approve": "approved",
+            "reject": "rejected",
+            "archive": "archived",
+        }[action_name]
+        visible_questions = {
+            question.id: question
+            for question in get_question_queryset_for_user(request.user).filter(
+                id__in=question_ids
+            )
+        }
+
+        results = []
+        for question_id in question_ids:
+            question = visible_questions.get(question_id)
+            if not question:
+                results.append(
+                    {
+                        "id": question_id,
+                        "status": "failed",
+                        "action": action_name,
+                        "message": "Question was not found or is not visible.",
+                        "question_status": "",
+                    }
+                )
+                continue
+
+            try:
+                if action_name == "approve":
+                    if not is_ready_for_approval(question):
+                        raise DjangoValidationError(
+                            "Question is not ready for approval."
+                        )
+                    updated_question = approve_question(question, request.user)
+                elif action_name == "reject":
+                    updated_question = reject_question(question, request.user)
+                else:
+                    updated_question = archive_question(question, request.user)
+
+                results.append(
+                    {
+                        "id": question_id,
+                        "status": "success",
+                        "action": action_name,
+                        "message": f"Question {action_past_tense}.",
+                        "question_status": updated_question.status,
+                    }
+                )
+            except Exception as exc:
+                results.append(
+                    {
+                        "id": question_id,
+                        "status": "failed",
+                        "action": action_name,
+                        "message": str(exc),
+                        "question_status": question.status,
+                    }
+                )
+
+        return Response({"results": results})
+
+
+class QuestionQualityDashboardView(APIView):
+    permission_classes = [CanViewQuestionQualityDashboard]
+
+    def get(self, request):
+        query_serializer = QuestionQualityDashboardQuerySerializer(
+            data=request.query_params
+        )
+        query_serializer.is_valid(raise_exception=True)
+        dashboard = build_question_quality_dashboard(
+            user=request.user,
+            params=query_serializer.validated_data,
+        )
+        serializer = QuestionQualityDashboardSerializer(dashboard)
+        return Response(serializer.data)
 
 
 class QuestionImportBatchViewSet(viewsets.ModelViewSet):

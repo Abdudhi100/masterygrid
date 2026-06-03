@@ -753,3 +753,97 @@ class ApprovedQuestionSearchSerializer(serializers.Serializer):
     year = serializers.IntegerField(required=False)
     count = serializers.IntegerField(required=False, min_value=1, max_value=100)
     random = serializers.BooleanField(required=False, default=False)
+
+
+class QuestionQualityDashboardQuerySerializer(serializers.Serializer):
+    subject = serializers.IntegerField(required=False)
+    topic = serializers.IntegerField(required=False)
+    class_level = serializers.IntegerField(required=False)
+    status = serializers.ChoiceField(choices=QuestionStatus.values, required=False)
+    issue_type = serializers.ChoiceField(
+        choices=[
+            "needs_manual_review",
+            "missing_explanations",
+            "diagram_issues",
+            "duplicate_suspects",
+            "imported_drafts",
+            "ready_for_approval",
+            "metadata_issues",
+        ],
+        required=False,
+    )
+    source_type = serializers.ChoiceField(
+        choices=QuestionSourceType.values,
+        required=False,
+    )
+    school = serializers.IntegerField(required=False)
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=100)
+
+
+class QuestionQualitySummarySerializer(serializers.Serializer):
+    total_questions = serializers.IntegerField()
+    approved_count = serializers.IntegerField()
+    draft_count = serializers.IntegerField()
+    rejected_count = serializers.IntegerField()
+    archived_count = serializers.IntegerField()
+    needs_manual_review_count = serializers.IntegerField()
+    missing_explanation_count = serializers.IntegerField()
+    missing_topic_count = serializers.IntegerField()
+    missing_difficulty_count = serializers.IntegerField()
+    diagram_issue_count = serializers.IntegerField()
+    duplicate_suspect_count = serializers.IntegerField()
+    ready_for_review_count = serializers.IntegerField()
+
+
+class QuestionQualityRowSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    question_preview = serializers.CharField()
+    subject_id = serializers.IntegerField(allow_null=True)
+    subject_name = serializers.CharField(allow_blank=True)
+    topic_id = serializers.IntegerField(allow_null=True)
+    topic_title = serializers.CharField(allow_blank=True)
+    class_level_id = serializers.IntegerField(allow_null=True)
+    class_level_name = serializers.CharField(allow_blank=True)
+    difficulty = serializers.CharField(allow_blank=True)
+    status = serializers.CharField()
+    source_id = serializers.IntegerField(allow_null=True)
+    source_name = serializers.CharField(allow_blank=True)
+    source_type = serializers.CharField(allow_blank=True)
+    year = serializers.IntegerField(allow_null=True)
+    has_diagram = serializers.BooleanField()
+    media_count = serializers.IntegerField()
+    needs_manual_review = serializers.BooleanField()
+    issue_type = serializers.CharField()
+    issue_message = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    created_by = serializers.IntegerField(allow_null=True)
+    created_by_name = serializers.CharField(allow_blank=True)
+    import_batch_id = serializers.IntegerField(allow_null=True)
+    import_batch_title = serializers.CharField(allow_blank=True)
+    action_url = serializers.CharField()
+    ai_suggestion_url = serializers.CharField()
+
+
+class QuestionQualitySectionsSerializer(serializers.Serializer):
+    needs_manual_review = QuestionQualityRowSerializer(many=True)
+    missing_explanations = QuestionQualityRowSerializer(many=True)
+    diagram_issues = QuestionQualityRowSerializer(many=True)
+    duplicate_suspects = QuestionQualityRowSerializer(many=True)
+    imported_drafts = QuestionQualityRowSerializer(many=True)
+    ready_for_approval = QuestionQualityRowSerializer(many=True)
+    metadata_issues = QuestionQualityRowSerializer(many=True)
+
+
+class QuestionQualityDashboardSerializer(serializers.Serializer):
+    summary = QuestionQualitySummarySerializer()
+    sections = QuestionQualitySectionsSerializer()
+    filters = serializers.DictField()
+
+
+class QuestionBulkActionSerializer(serializers.Serializer):
+    question_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+        max_length=200,
+    )
+    action = serializers.ChoiceField(choices=["approve", "reject", "archive"])

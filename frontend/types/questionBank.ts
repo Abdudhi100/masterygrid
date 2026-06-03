@@ -268,3 +268,89 @@ export type QuestionImportPreflightResponse = {
   summary: QuestionImportPreflightSummary;
   rows: QuestionImportPreflightRow[];
 };
+
+export type QuestionQualityIssueType =
+  | "needs_manual_review"
+  | "missing_explanations"
+  | "diagram_issues"
+  | "duplicate_suspects"
+  | "imported_drafts"
+  | "ready_for_approval"
+  | "metadata_issues";
+
+export type QuestionQualitySummary = {
+  total_questions: number;
+  approved_count: number;
+  draft_count: number;
+  rejected_count: number;
+  archived_count: number;
+  needs_manual_review_count: number;
+  missing_explanation_count: number;
+  missing_topic_count: number;
+  missing_difficulty_count: number;
+  diagram_issue_count: number;
+  duplicate_suspect_count: number;
+  ready_for_review_count: number;
+};
+
+export type QuestionQualityRow = {
+  id: number;
+  question_preview: string;
+  subject_id: number | null;
+  subject_name: string;
+  topic_id: number | null;
+  topic_title: string;
+  class_level_id: number | null;
+  class_level_name: string;
+  difficulty: QuestionDifficulty | "";
+  status: QuestionStatus;
+  source_id: number | null;
+  source_name: string;
+  source_type: QuestionSourceType | "";
+  year: number | null;
+  has_diagram: boolean;
+  media_count: number;
+  needs_manual_review: boolean;
+  issue_type: string;
+  issue_message: string;
+  created_at: string;
+  created_by: number | null;
+  created_by_name: string;
+  import_batch_id: number | null;
+  import_batch_title: string;
+  action_url: string;
+  ai_suggestion_url: string;
+};
+
+export type QuestionQualitySections = Record<QuestionQualityIssueType, QuestionQualityRow[]>;
+
+export type QuestionQualityDashboard = {
+  summary: QuestionQualitySummary;
+  sections: QuestionQualitySections;
+  filters: Record<string, string | number>;
+};
+
+export type QuestionQualityFilters = QueryParams & {
+  subject?: number | string;
+  topic?: number | string;
+  class_level?: number | string;
+  status?: QuestionStatus | "";
+  issue_type?: QuestionQualityIssueType | "";
+  source_type?: QuestionSourceType | "";
+  school?: number | string;
+  limit?: number | string;
+};
+
+export type QuestionBulkAction = "approve" | "reject" | "archive";
+
+export type QuestionBulkActionResult = {
+  id: number;
+  status: "success" | "failed";
+  action: QuestionBulkAction;
+  message: string;
+  question_status: QuestionStatus | "";
+};
+
+export type QuestionBulkActionResponse = {
+  results: QuestionBulkActionResult[];
+};

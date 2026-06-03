@@ -3,6 +3,7 @@ import type { UserRole } from "@/types/auth";
 
 export const adminNavItems: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard" },
+  { label: "Setup Wizard", href: "/admin/setup" },
   { label: "Academic Sessions", href: "/admin/academic-sessions" },
   { label: "Terms", href: "/admin/terms" },
   { label: "Class Levels", href: "/admin/class-levels" },
@@ -15,6 +16,7 @@ export const adminNavItems: NavItem[] = [
   { label: "Student Enrollments", href: "/admin/student-enrollments" },
   { label: "Bulk Import", href: "/admin/imports" },
   { label: "Question Bank", href: "/admin/question-bank" },
+  { label: "Question Quality", href: "/admin/question-bank/quality" },
   { label: "AI Suggestions", href: "/admin/question-bank/ai-suggestions" },
   { label: "Question Imports", href: "/admin/question-bank/imports" },
   { label: "Question Sources", href: "/admin/question-bank/sources" },

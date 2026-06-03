@@ -12,6 +12,8 @@ import { StatCard } from "@/components/ui/StatCard";
 import { getAdminOverview } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import type { AdminOverview } from "@/types/analytics";
+import { getSchoolSetupStatus } from "@/lib/schools";
+import type { SchoolSetupStatus } from "@/types/schools";
 import {
   formatDate,
   formatPercentage,
@@ -54,13 +56,19 @@ const analyticsLinks = [
 
 export default function AdminDashboardPage() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [setupStatus, setSetupStatus] = useState<SchoolSetupStatus | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadOverview() {
       try {
-        setOverview(await getAdminOverview());
+        const [overviewPayload, setupPayload] = await Promise.all([
+          getAdminOverview(),
+          getSchoolSetupStatus().catch(() => null)
+        ]);
+        setOverview(overviewPayload);
+        setSetupStatus(setupPayload);
       } catch (err) {
         setError(
           err instanceof ApiError
@@ -76,19 +84,41 @@ export default function AdminDashboardPage() {
   }, []);
 
   if (isLoading) {
-    return <LoadingState label="Loading school analytics..." />;
+    return (
+      <>
+        <PageHeader
+          title="School dashboard"
+          description="A whole-school view of enrollment, assignments, performance, and intervention signals."
+        />
+        <LoadingState label="Loading school analytics..." />
+      </>
+    );
   }
 
   if (error) {
-    return <EmptyState title="Dashboard unavailable" description={error} />;
+    return (
+      <>
+        <PageHeader
+          title="School dashboard"
+          description="A whole-school view of enrollment, assignments, performance, and intervention signals."
+        />
+        <EmptyState title="Dashboard unavailable" description={error} />
+      </>
+    );
   }
 
   if (!overview) {
     return (
-      <EmptyState
-        title="No dashboard data"
-        description="School analytics will appear once assignments and submissions exist."
-      />
+      <>
+        <PageHeader
+          title="School dashboard"
+          description="A whole-school view of enrollment, assignments, performance, and intervention signals."
+        />
+        <EmptyState
+          title="No dashboard data"
+          description="School analytics will appear once assignments and submissions exist."
+        />
+      </>
     );
   }
 
@@ -98,6 +128,29 @@ export default function AdminDashboardPage() {
         title="School dashboard"
         description="A whole-school view of enrollment, assignments, performance, and intervention signals."
       />
+
+      {setupStatus && !setupStatus.is_setup_complete ? (
+        <Card className="mb-6 border-brand-100 bg-brand-50">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-brand-700">
+                School setup is {setupStatus.completion_percentage}% complete
+              </p>
+              <h2 className="mt-2 text-xl font-semibold text-ink">
+                Continue setup
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                {setupStatus.next_step
+                  ? setupStatus.next_step.recommendation
+                  : "Review the setup checklist to finish onboarding."}
+              </p>
+            </div>
+            <Link href="/admin/setup">
+              <Button>Continue Setup</Button>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <StatCard label="Students" value={overview.total_students} />

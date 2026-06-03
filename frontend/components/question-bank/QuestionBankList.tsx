@@ -231,6 +231,9 @@ export function QuestionBankList({ mode, basePath }: QuestionBankListProps) {
             </Link>
             {mode === "admin" ? (
               <>
+                <Link href="/admin/question-bank/quality">
+                  <Button variant="secondary">Question Quality</Button>
+                </Link>
                 <Link href="/admin/question-bank/imports/new">
                   <Button variant="secondary">Import CSV</Button>
                 </Link>
