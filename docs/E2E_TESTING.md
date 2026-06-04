@@ -416,6 +416,10 @@ Additional seeded workflow suites:
 - `19-student-dashboard-flow.spec.ts`: student submits a seeded assignment,
   opens the upgraded dashboard, verifies summary, assignments, learning path,
   practice, notifications, and follows a quick action link.
+- `20-teacher-dashboard-flow.spec.ts`: student submits a low-score seeded
+  assignment, teacher opens the upgraded action-center dashboard, sees weak
+  student/topic, remediation, intervention, notification sections, and follows
+  a quick action link.
 
 ## Login Debugging
 

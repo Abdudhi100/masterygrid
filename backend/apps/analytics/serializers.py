@@ -15,6 +15,113 @@ class TeacherOverviewSerializer(serializers.Serializer):
     weak_topics_summary = serializers.ListField()
 
 
+class TeacherDashboardSummarySerializer(serializers.Serializer):
+    active_assignments_count = serializers.IntegerField()
+    draft_assignments_count = serializers.IntegerField()
+    published_assignments_count = serializers.IntegerField()
+    overdue_assignments_count = serializers.IntegerField()
+    low_submission_assignments_count = serializers.IntegerField()
+    weak_students_count = serializers.IntegerField()
+    weak_topics_count = serializers.IntegerField()
+    open_interventions_count = serializers.IntegerField()
+    unread_notifications_count = serializers.IntegerField()
+
+
+class TeacherDashboardAssignmentSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    subject = serializers.CharField()
+    topic = serializers.CharField()
+    class_arm = serializers.CharField()
+    status = serializers.CharField()
+    deadline_status = serializers.CharField()
+    due_at = serializers.DateTimeField(allow_null=True)
+    question_count = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+    expected_students = serializers.IntegerField()
+    submitted_count = serializers.IntegerField()
+    graded_count = serializers.IntegerField()
+    late_submission_count = serializers.IntegerField()
+    submission_rate = serializers.FloatField()
+    href = serializers.CharField()
+    results_href = serializers.CharField()
+
+
+class TeacherDashboardRecentSubmissionSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    assignment_id = serializers.IntegerField()
+    assignment_title = serializers.CharField()
+    student_id = serializers.IntegerField()
+    student_name = serializers.CharField()
+    subject = serializers.CharField()
+    topic = serializers.CharField()
+    status = serializers.CharField()
+    score = serializers.IntegerField()
+    total_marks = serializers.IntegerField()
+    percentage = serializers.FloatField()
+    submitted_at = serializers.DateTimeField(allow_null=True)
+    graded_at = serializers.DateTimeField(allow_null=True)
+    is_late = serializers.BooleanField()
+    results_href = serializers.CharField()
+
+
+class TeacherDashboardInterventionSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    student_id = serializers.IntegerField()
+    student_name = serializers.CharField()
+    category = serializers.CharField()
+    priority = serializers.CharField()
+    status = serializers.CharField()
+    due_date = serializers.DateField(allow_null=True)
+    updated_at = serializers.DateTimeField()
+    href = serializers.CharField()
+
+
+class TeacherDashboardNotificationSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    message = serializers.CharField(allow_blank=True)
+    notification_type = serializers.CharField()
+    priority = serializers.CharField()
+    status = serializers.CharField()
+    target_url = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+
+
+class TeacherDashboardQuickActionSerializer(serializers.Serializer):
+    title = serializers.CharField()
+    href = serializers.CharField()
+    priority = serializers.CharField()
+
+
+class TeacherDashboardAssignmentsSerializer(serializers.Serializer):
+    recent_assignments = TeacherDashboardAssignmentSerializer(many=True)
+    overdue_assignments = TeacherDashboardAssignmentSerializer(many=True)
+    low_submission_assignments = TeacherDashboardAssignmentSerializer(many=True)
+
+
+class TeacherDashboardSubmissionsSerializer(serializers.Serializer):
+    recent_submissions = TeacherDashboardRecentSubmissionSerializer(many=True)
+
+
+class TeacherDashboardRemediationSerializer(serializers.Serializer):
+    recommended_actions = serializers.ListField()
+    summary = serializers.DictField()
+
+
+class TeacherDashboardSerializer(serializers.Serializer):
+    summary = TeacherDashboardSummarySerializer()
+    assignments = TeacherDashboardAssignmentsSerializer()
+    submissions = TeacherDashboardSubmissionsSerializer()
+    weak_students = serializers.ListField()
+    weak_topics = serializers.ListField()
+    remediation = TeacherDashboardRemediationSerializer()
+    interventions = TeacherDashboardInterventionSerializer(many=True)
+    notifications = TeacherDashboardNotificationSerializer(many=True)
+    quick_actions = TeacherDashboardQuickActionSerializer(many=True)
+
+
 class AssignmentResultsSerializer(serializers.Serializer):
     assignment = serializers.DictField()
     submission_summary = serializers.DictField()

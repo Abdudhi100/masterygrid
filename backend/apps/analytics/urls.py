@@ -11,6 +11,7 @@ from apps.analytics.views import (
     StudentDashboardAPIView,
     StudentProgressReportAPIView,
     TeacherAssignmentResultsAPIView,
+    TeacherDashboardAPIView,
     TeacherOverviewAPIView,
     TeacherRemediationPlanAPIView,
     TeacherStudentPerformanceAPIView,
@@ -53,6 +54,11 @@ urlpatterns = [
         name="admin-intervention-dashboard",
     ),
     path("teacher/overview/", TeacherOverviewAPIView.as_view(), name="teacher-overview"),
+    path(
+        "teacher/dashboard/",
+        TeacherDashboardAPIView.as_view(),
+        name="teacher-dashboard",
+    ),
     path(
         "students/<int:student_id>/progress-report/",
         StudentProgressReportAPIView.as_view(),

@@ -29,6 +29,8 @@ from apps.common.choices import AssignmentStatus, SubmissionStatus, UserRole
 from apps.common.choices import QuestionStatus
 from apps.notifications.models import NotificationStatus
 from apps.notifications.selectors import get_unread_count, get_user_notifications
+from apps.interventions.models import InterventionStatus
+from apps.interventions.selectors import get_interventions_for_user
 from apps.practice.analytics import (
     get_student_learning_path,
     get_student_practice_dashboard,
@@ -46,6 +48,8 @@ ADMIN_INTERVENTION_LIMIT = 10
 STUDENT_DASHBOARD_ASSIGNMENT_LIMIT = 5
 STUDENT_DASHBOARD_RECENT_LIMIT = 5
 STUDENT_DASHBOARD_NOTIFICATION_LIMIT = 5
+TEACHER_DASHBOARD_LIMIT = 5
+LOW_SUBMISSION_RATE_THRESHOLD = 60
 
 
 RISK_LEVEL_WEIGHT = {
@@ -144,6 +148,321 @@ def get_teacher_overview(teacher):
         "recent_assignments": recent_assignments,
         "recent_low_performing_students": recent_low_performing_students,
         "weak_topics_summary": get_teacher_weak_topics(teacher)[:5],
+    }
+
+
+def _teacher_assignment_submission_stats(assignment):
+    expected = get_assignment_expected_students(assignment).count()
+    submitted = assignment.submissions.filter(
+        Q(submitted_at__isnull=False)
+        | Q(
+            status__in=[
+                SubmissionStatus.SUBMITTED,
+                SubmissionStatus.GRADED,
+                SubmissionStatus.AUTO_SUBMITTED,
+            ]
+        )
+    ).count()
+    graded = assignment.submissions.filter(graded_at__isnull=False).count()
+    late = assignment.submissions.filter(is_late=True).count()
+    return {
+        "expected_students": expected,
+        "submitted_count": submitted,
+        "graded_count": graded,
+        "late_submission_count": late,
+        "submission_rate": calculate_rate(submitted, expected),
+    }
+
+
+def _teacher_dashboard_assignment_item(assignment):
+    stats = _teacher_assignment_submission_stats(assignment)
+    return {
+        "id": assignment.id,
+        "title": assignment.title,
+        "subject": assignment.subject.name,
+        "topic": assignment.topic.title,
+        "class_arm": str(assignment.class_arm),
+        "status": assignment.status,
+        "deadline_status": get_deadline_status(assignment),
+        "due_at": assignment.due_at,
+        "question_count": assignment.question_count,
+        "created_at": assignment.created_at,
+        "href": f"/teacher/assignments/{assignment.id}",
+        "results_href": f"/teacher/assignments/{assignment.id}/results",
+        **stats,
+    }
+
+
+def _teacher_dashboard_recent_submission(submission):
+    assignment = submission.assignment
+    return {
+        "id": submission.id,
+        "assignment_id": assignment.id,
+        "assignment_title": assignment.title,
+        "student_id": submission.student_id,
+        "student_name": submission.student.full_name,
+        "subject": assignment.subject.name,
+        "topic": assignment.topic.title,
+        "status": submission.status,
+        "score": submission.score,
+        "total_marks": submission.total_marks,
+        "percentage": percentage_value(submission.percentage),
+        "submitted_at": submission.submitted_at,
+        "graded_at": submission.graded_at,
+        "is_late": submission.is_late,
+        "results_href": f"/teacher/assignments/{assignment.id}/results",
+    }
+
+
+def _teacher_dashboard_intervention(intervention):
+    return {
+        "id": intervention.id,
+        "title": intervention.title,
+        "student_id": intervention.student_id,
+        "student_name": intervention.student.full_name,
+        "category": intervention.category,
+        "priority": intervention.priority,
+        "status": intervention.status,
+        "due_date": intervention.due_date,
+        "updated_at": intervention.updated_at,
+        "href": f"/teacher/interventions/{intervention.id}",
+    }
+
+
+def _teacher_dashboard_notification(notification):
+    return {
+        "id": notification.id,
+        "title": notification.title,
+        "message": notification.message,
+        "notification_type": notification.notification_type,
+        "priority": notification.priority,
+        "status": notification.status,
+        "target_url": notification.target_url,
+        "created_at": notification.created_at,
+    }
+
+
+def _teacher_dashboard_quick_actions(
+    *,
+    overdue_count,
+    low_submission_count,
+    weak_students_count,
+    weak_topics_count,
+    remediation_count,
+    intervention_count,
+):
+    actions = []
+    if overdue_count:
+        actions.append(
+            {
+                "title": "Review overdue assignments",
+                "href": "/teacher/assignments",
+                "priority": "urgent",
+            }
+        )
+    if low_submission_count:
+        actions.append(
+            {
+                "title": "Check low submission assignments",
+                "href": "/teacher/results",
+                "priority": "high",
+            }
+        )
+    if remediation_count:
+        actions.append(
+            {
+                "title": "Create a remedial assignment",
+                "href": "/teacher/remediation",
+                "priority": "high",
+            }
+        )
+    if weak_students_count:
+        actions.append(
+            {
+                "title": "Review weak students",
+                "href": "/teacher/weak-students",
+                "priority": "medium",
+            }
+        )
+    if weak_topics_count:
+        actions.append(
+            {
+                "title": "Review weak topics",
+                "href": "/teacher/weak-topics",
+                "priority": "medium",
+            }
+        )
+    if intervention_count:
+        actions.append(
+            {
+                "title": "Follow up interventions",
+                "href": "/teacher/interventions",
+                "priority": "medium",
+            }
+        )
+
+    actions.extend(
+        [
+            {
+                "title": "Create assignment",
+                "href": "/teacher/assignments/new",
+                "priority": "normal",
+            },
+            {
+                "title": "Log lesson",
+                "href": "/teacher/lessons/new",
+                "priority": "normal",
+            },
+        ]
+    )
+    return actions[:6]
+
+
+def get_teacher_dashboard(teacher):
+    assignments = list(
+        get_teacher_assignments(teacher)
+        .select_related("subject", "topic", "class_arm", "class_arm__class_level")
+        .prefetch_related("submissions")
+    )
+    published_assignments = [
+        assignment
+        for assignment in assignments
+        if assignment.status == AssignmentStatus.PUBLISHED
+    ]
+    recent_assignments = sorted(
+        assignments,
+        key=lambda assignment: assignment.created_at,
+        reverse=True,
+    )[:TEACHER_DASHBOARD_LIMIT]
+    overdue_assignments = [
+        assignment
+        for assignment in published_assignments
+        if get_deadline_status(assignment) in {"overdue", "late_open"}
+    ]
+    overdue_assignments = sorted(
+        overdue_assignments,
+        key=lambda assignment: assignment.due_at or timezone.datetime.max.replace(
+            tzinfo=timezone.get_current_timezone()
+        ),
+    )
+
+    low_submission_assignments = []
+    for assignment in published_assignments:
+        item = _teacher_dashboard_assignment_item(assignment)
+        if (
+            item["expected_students"] > 0
+            and item["submission_rate"] < LOW_SUBMISSION_RATE_THRESHOLD
+        ):
+            low_submission_assignments.append(item)
+    low_submission_assignments = sorted(
+        low_submission_assignments,
+        key=lambda item: (item["submission_rate"], item["due_at"] or timezone.now()),
+    )
+
+    weak_students = get_teacher_weak_students(teacher)
+    weak_topics = get_teacher_weak_topics(teacher)
+    remediation = get_teacher_remediation_plan(teacher)
+    open_interventions_qs = (
+        get_interventions_for_user(teacher)
+        .filter(
+            Q(created_by=teacher) | Q(assigned_to=teacher),
+            status__in=[InterventionStatus.OPEN, InterventionStatus.IN_PROGRESS],
+        )
+        .order_by("-updated_at", "-created_at")
+    )
+    open_interventions = list(open_interventions_qs[:TEACHER_DASHBOARD_LIMIT])
+    unread_notifications = list(
+        get_user_notifications(teacher)
+        .filter(status=NotificationStatus.UNREAD)
+        .order_by("-created_at")[:TEACHER_DASHBOARD_LIMIT]
+    )
+    recent_submissions = (
+        Submission.objects.filter(
+            school=teacher.school,
+            assignment__teacher=teacher,
+        )
+        .filter(
+            Q(submitted_at__isnull=False)
+            | Q(
+                status__in=[
+                    SubmissionStatus.SUBMITTED,
+                    SubmissionStatus.GRADED,
+                    SubmissionStatus.AUTO_SUBMITTED,
+                ]
+            )
+        )
+        .select_related(
+            "student",
+            "assignment",
+            "assignment__subject",
+            "assignment__topic",
+        )
+        .order_by("-submitted_at", "-updated_at")[:TEACHER_DASHBOARD_LIMIT]
+    )
+
+    active_assignments_count = sum(
+        1
+        for assignment in published_assignments
+        if get_deadline_status(assignment) in {"scheduled", "open", "due_soon", "late_open"}
+    )
+
+    return {
+        "summary": {
+            "active_assignments_count": active_assignments_count,
+            "draft_assignments_count": sum(
+                1 for assignment in assignments if assignment.status == AssignmentStatus.DRAFT
+            ),
+            "published_assignments_count": len(published_assignments),
+            "overdue_assignments_count": len(overdue_assignments),
+            "low_submission_assignments_count": len(low_submission_assignments),
+            "weak_students_count": len(weak_students),
+            "weak_topics_count": len(weak_topics),
+            "open_interventions_count": open_interventions_qs.count(),
+            "unread_notifications_count": get_unread_count(teacher),
+        },
+        "assignments": {
+            "recent_assignments": [
+                _teacher_dashboard_assignment_item(assignment)
+                for assignment in recent_assignments
+            ],
+            "overdue_assignments": [
+                _teacher_dashboard_assignment_item(assignment)
+                for assignment in overdue_assignments[:TEACHER_DASHBOARD_LIMIT]
+            ],
+            "low_submission_assignments": low_submission_assignments[
+                :TEACHER_DASHBOARD_LIMIT
+            ],
+        },
+        "submissions": {
+            "recent_submissions": [
+                _teacher_dashboard_recent_submission(submission)
+                for submission in recent_submissions
+            ],
+        },
+        "weak_students": weak_students[:TEACHER_DASHBOARD_LIMIT],
+        "weak_topics": weak_topics[:TEACHER_DASHBOARD_LIMIT],
+        "remediation": {
+            "recommended_actions": remediation["recommended_actions"][
+                :TEACHER_DASHBOARD_LIMIT
+            ],
+            "summary": remediation["summary"],
+        },
+        "interventions": [
+            _teacher_dashboard_intervention(intervention)
+            for intervention in open_interventions
+        ],
+        "notifications": [
+            _teacher_dashboard_notification(notification)
+            for notification in unread_notifications
+        ],
+        "quick_actions": _teacher_dashboard_quick_actions(
+            overdue_count=len(overdue_assignments),
+            low_submission_count=len(low_submission_assignments),
+            weak_students_count=len(weak_students),
+            weak_topics_count=len(weak_topics),
+            remediation_count=len(remediation["recommended_actions"]),
+            intervention_count=open_interventions_qs.count(),
+        ),
     }
 
 

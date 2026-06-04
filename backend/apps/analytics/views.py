@@ -12,6 +12,7 @@ from apps.analytics.serializers import (
     AdminInterventionDashboardSerializer,
     StudentDashboardSerializer,
     StudentProgressReportSerializer,
+    TeacherDashboardSerializer,
     TeacherRemediationPlanSerializer,
 )
 from apps.analytics.services import (
@@ -26,6 +27,7 @@ from apps.analytics.services import (
     get_student_dashboard,
     get_student_performance_for_teacher,
     get_student_progress_report,
+    get_teacher_dashboard,
     get_teacher_remediation_plan,
     get_teacher_overview,
     get_teacher_weak_students,
@@ -42,6 +44,14 @@ class TeacherOverviewAPIView(APIView):
 
     def get(self, request):
         return Response(get_teacher_overview(request.user))
+
+
+class TeacherDashboardAPIView(APIView):
+    permission_classes = [IsTeacherOnlyAnalyticsUser]
+
+    def get(self, request):
+        serializer = TeacherDashboardSerializer(get_teacher_dashboard(request.user))
+        return Response(serializer.data)
 
 
 class TeacherAssignmentResultsAPIView(APIView):

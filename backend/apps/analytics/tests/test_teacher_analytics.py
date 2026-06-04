@@ -16,6 +16,9 @@ from apps.academics.models import (
 from apps.accounts.models import User
 from apps.assignments.services import create_assignment_from_topic, publish_assignment
 from apps.common.choices import QuestionStatus, UserRole
+from apps.interventions.models import StudentIntervention
+from apps.notifications.models import NotificationPriority, NotificationType
+from apps.notifications.services import create_notification
 from apps.practice.models import PracticeSession, PracticeSessionStatus
 from apps.question_bank.models import Question, QuestionOption
 from apps.schools.models import School
@@ -270,6 +273,74 @@ class TeacherAnalyticsTests(TestCase):
         response = self.client.get("/api/analytics/teacher/overview/")
 
         self.assertEqual(response.status_code, 403)
+
+    def test_teacher_dashboard_composes_action_center(self):
+        submitted_assignment = self.create_published_assignment(question_count=2)
+        self.submit_for_student(submitted_assignment, self.student, correct_count=0)
+        overdue_assignment = self.create_published_assignment(question_count=1)
+        overdue_assignment.due_at = timezone.now() - timedelta(hours=2)
+        overdue_assignment.save(update_fields=["due_at", "updated_at"])
+        intervention = StudentIntervention.objects.create(
+            school=self.school,
+            student=self.student,
+            created_by=self.teacher,
+            assigned_to=self.teacher,
+            title="Follow up dashboard student",
+            description="Synthetic dashboard intervention.",
+            priority="high",
+        )
+        create_notification(
+            recipient=self.teacher,
+            actor=self.student,
+            title="Dashboard notification",
+            message="Student submitted work.",
+            notification_type=NotificationType.ASSIGNMENT_SUBMITTED,
+            priority=NotificationPriority.HIGH,
+            target_url=f"/teacher/assignments/{submitted_assignment.id}/results",
+        )
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.get("/api/analytics/teacher/dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        summary = response.data["summary"]
+        self.assertEqual(summary["published_assignments_count"], 2)
+        self.assertEqual(summary["overdue_assignments_count"], 1)
+        self.assertGreaterEqual(summary["low_submission_assignments_count"], 1)
+        self.assertGreaterEqual(summary["weak_students_count"], 1)
+        self.assertGreaterEqual(summary["weak_topics_count"], 1)
+        self.assertEqual(summary["open_interventions_count"], 1)
+        self.assertGreaterEqual(summary["unread_notifications_count"], 1)
+
+        self.assertTrue(response.data["assignments"]["recent_assignments"])
+        self.assertEqual(
+            response.data["assignments"]["overdue_assignments"][0]["id"],
+            overdue_assignment.id,
+        )
+        self.assertTrue(response.data["assignments"]["low_submission_assignments"])
+        self.assertEqual(
+            response.data["submissions"]["recent_submissions"][0]["student_id"],
+            self.student.id,
+        )
+        weak_student_ids = [item["student_id"] for item in response.data["weak_students"]]
+        self.assertIn(self.student.id, weak_student_ids)
+        self.assertEqual(response.data["weak_topics"][0]["topic"], self.topic.title)
+        self.assertTrue(response.data["remediation"]["recommended_actions"])
+        self.assertEqual(response.data["interventions"][0]["id"], intervention.id)
+        self.assertEqual(response.data["notifications"][0]["title"], "Dashboard notification")
+        self.assertTrue(response.data["quick_actions"])
+        self.assertNotIn("correct_option", str(response.data))
+        self.assertNotIn("Explanation for", str(response.data))
+
+    def test_non_teacher_cannot_access_teacher_dashboard(self):
+        self.client.force_authenticate(self.student)
+        student_response = self.client.get("/api/analytics/teacher/dashboard/")
+
+        self.client.force_authenticate(self.other_school_admin)
+        admin_response = self.client.get("/api/analytics/teacher/dashboard/")
+
+        self.assertEqual(student_response.status_code, 403)
+        self.assertEqual(admin_response.status_code, 403)
 
     def test_teacher_remediation_plan_recommends_weak_topic_action(self):
         assignment = self.create_published_assignment(question_count=2)

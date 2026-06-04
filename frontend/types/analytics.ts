@@ -468,6 +468,107 @@ export type TeacherOverview = {
   weak_topics_summary: TeacherWeakTopic[];
 };
 
+export type TeacherDashboardSummary = {
+  active_assignments_count: number;
+  draft_assignments_count: number;
+  published_assignments_count: number;
+  overdue_assignments_count: number;
+  low_submission_assignments_count: number;
+  weak_students_count: number;
+  weak_topics_count: number;
+  open_interventions_count: number;
+  unread_notifications_count: number;
+};
+
+export type TeacherDashboardAssignment = {
+  id: number;
+  title: string;
+  subject: string;
+  topic: string;
+  class_arm: string;
+  status: string;
+  deadline_status: AssignmentDeadlineStatus;
+  due_at: string | null;
+  question_count: number;
+  created_at: string;
+  expected_students: number;
+  submitted_count: number;
+  graded_count: number;
+  late_submission_count: number;
+  submission_rate: number;
+  href: string;
+  results_href: string;
+};
+
+export type TeacherDashboardRecentSubmission = {
+  id: number;
+  assignment_id: number;
+  assignment_title: string;
+  student_id: number;
+  student_name: string;
+  subject: string;
+  topic: string;
+  status: string;
+  score: number;
+  total_marks: number;
+  percentage: number;
+  submitted_at: string | null;
+  graded_at: string | null;
+  is_late: boolean;
+  results_href: string;
+};
+
+export type TeacherDashboardIntervention = {
+  id: number;
+  title: string;
+  student_id: number;
+  student_name: string;
+  category: string;
+  priority: string;
+  status: string;
+  due_date: string | null;
+  updated_at: string;
+  href: string;
+};
+
+export type TeacherDashboardNotification = {
+  id: number;
+  title: string;
+  message: string;
+  notification_type: NotificationType;
+  priority: NotificationPriority;
+  status: NotificationStatus;
+  target_url: string;
+  created_at: string;
+};
+
+export type TeacherDashboardQuickAction = {
+  title: string;
+  href: string;
+  priority: "urgent" | "high" | "medium" | "low" | "normal" | string;
+};
+
+export type TeacherDashboard = {
+  summary: TeacherDashboardSummary;
+  assignments: {
+    recent_assignments: TeacherDashboardAssignment[];
+    overdue_assignments: TeacherDashboardAssignment[];
+    low_submission_assignments: TeacherDashboardAssignment[];
+  };
+  submissions: {
+    recent_submissions: TeacherDashboardRecentSubmission[];
+  };
+  weak_students: TeacherWeakStudent[];
+  weak_topics: TeacherWeakTopic[];
+  remediation: {
+    recommended_actions: RemediationTopicCard[];
+    summary: TeacherRemediationPlan["summary"];
+  };
+  interventions: TeacherDashboardIntervention[];
+  notifications: TeacherDashboardNotification[];
+  quick_actions: TeacherDashboardQuickAction[];
+};
+
 export type StudentWeakTopic = {
   subject?: string;
   topic: string;

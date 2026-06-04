@@ -12,6 +12,7 @@ import type {
   TeacherOverview,
   TeacherRemediationPlan,
   StudentProgressReport,
+  TeacherDashboard,
   TeacherStudentPerformance,
   TeacherWeakStudent,
   TeacherWeakTopic
@@ -47,6 +48,9 @@ export const getStudentDashboard = () =>
 
 export const getTeacherOverview = () =>
   api.get<TeacherOverview>("/analytics/teacher/overview/");
+
+export const getTeacherDashboard = () =>
+  api.get<TeacherDashboard>("/analytics/teacher/dashboard/");
 
 export const getTeacherAssignmentResults = (assignmentId: number | string) =>
   api.get<TeacherAssignmentResults>(
