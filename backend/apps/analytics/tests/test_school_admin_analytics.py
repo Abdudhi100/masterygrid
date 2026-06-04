@@ -14,8 +14,19 @@ from apps.academics.models import (
     Topic,
 )
 from apps.accounts.models import User
+from apps.audit.models import AuditCategory, AuditLog
 from apps.assignments.services import create_assignment_from_topic, publish_assignment
 from apps.common.choices import QuestionStatus, UserRole
+from apps.interventions.models import (
+    InterventionPriority,
+    InterventionStatus,
+    StudentIntervention,
+)
+from apps.notifications.models import (
+    Notification,
+    NotificationPriority,
+    NotificationType,
+)
 from apps.question_bank.models import Question, QuestionOption
 from apps.schools.models import School
 from apps.submissions.services import create_or_get_submission, submit_assignment
@@ -336,6 +347,93 @@ class SchoolAdminAnalyticsTests(TestCase):
         student_response = self.client.get(
             "/api/analytics/admin/intervention-dashboard/",
         )
+
+        self.assertEqual(teacher_response.status_code, 403)
+        self.assertEqual(student_response.status_code, 403)
+
+    def test_school_admin_dashboard_combines_setup_risk_and_actions(self):
+        assignment = self.create_published_assignment(question_count=2)
+        self.submit_for_student(assignment, self.student, correct_count=0)
+        StudentIntervention.objects.create(
+            school=self.school,
+            student=self.student,
+            created_by=self.admin,
+            assigned_to=self.teacher,
+            title="E2E follow-up",
+            description="Support this student.",
+            priority=InterventionPriority.HIGH,
+            status=InterventionStatus.OPEN,
+            source_subject=self.subject,
+            source_topic=self.topic,
+            source_class_arm=self.class_arm,
+        )
+        Notification.objects.create(
+            school=self.school,
+            recipient=self.admin,
+            actor=self.teacher,
+            title="Admin dashboard notification",
+            message="A high priority update.",
+            notification_type=NotificationType.SYSTEM,
+            priority=NotificationPriority.HIGH,
+        )
+        AuditLog.objects.create(
+            school=self.school,
+            actor=self.admin,
+            actor_email=self.admin.email,
+            actor_role=self.admin.role,
+            category=AuditCategory.ASSIGNMENT,
+            action="published",
+            object_type="assignment",
+            object_id=str(assignment.id),
+            object_repr=assignment.title,
+        )
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get("/api/analytics/admin/dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["summary"]["students_count"], 2)
+        self.assertEqual(response.data["summary"]["teachers_count"], 2)
+        self.assertEqual(response.data["summary"]["published_assignments_count"], 1)
+        self.assertEqual(response.data["summary"]["weak_students_count"], 1)
+        self.assertEqual(response.data["summary"]["open_interventions_count"], 1)
+        self.assertEqual(response.data["summary"]["unread_notifications_count"], 1)
+        self.assertIn("completion_percentage", response.data["setup"])
+        self.assertTrue(response.data["performance"]["weak_students_preview"])
+        self.assertTrue(response.data["compliance"]["low_submission_assignments"])
+        self.assertEqual(
+            response.data["interventions"]["open_interventions"][0]["title"],
+            "E2E follow-up",
+        )
+        self.assertEqual(
+            response.data["notifications"][0]["title"],
+            "Admin dashboard notification",
+        )
+        self.assertEqual(
+            response.data["audit"]["recent_audit_logs"][0]["object_repr"],
+            assignment.title,
+        )
+        quick_action_hrefs = {
+            item["href"] for item in response.data["quick_actions"]
+        }
+        self.assertIn("/admin/setup", quick_action_hrefs)
+
+    def test_school_admin_dashboard_is_school_scoped(self):
+        self.create_published_assignment(question_count=1)
+        self.client.force_authenticate(self.other_admin)
+
+        response = self.client.get("/api/analytics/admin/dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["summary"]["students_count"], 1)
+        self.assertEqual(response.data["summary"]["published_assignments_count"], 0)
+        self.assertEqual(response.data["summary"]["open_interventions_count"], 0)
+
+    def test_teacher_and_student_cannot_access_admin_dashboard(self):
+        self.client.force_authenticate(self.teacher)
+        teacher_response = self.client.get("/api/analytics/admin/dashboard/")
+        self.client.force_authenticate(self.student)
+        student_response = self.client.get("/api/analytics/admin/dashboard/")
 
         self.assertEqual(teacher_response.status_code, 403)
         self.assertEqual(student_response.status_code, 403)

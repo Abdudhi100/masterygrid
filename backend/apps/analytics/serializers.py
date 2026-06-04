@@ -433,6 +433,109 @@ class AdminInterventionDashboardSerializer(serializers.Serializer):
     recommended_actions = AdminUrgentInterventionSerializer(many=True)
 
 
+class AdminDashboardSummarySerializer(serializers.Serializer):
+    setup_completion_percentage = serializers.IntegerField()
+    students_count = serializers.IntegerField()
+    teachers_count = serializers.IntegerField()
+    class_arms_count = serializers.IntegerField()
+    subjects_count = serializers.IntegerField()
+    published_assignments_count = serializers.IntegerField()
+    overdue_assignments_count = serializers.IntegerField()
+    assignment_submission_rate = serializers.FloatField()
+    weak_students_count = serializers.IntegerField()
+    high_risk_classes_count = serializers.IntegerField()
+    open_interventions_count = serializers.IntegerField()
+    unread_notifications_count = serializers.IntegerField()
+
+
+class AdminDashboardSetupSerializer(serializers.Serializer):
+    is_setup_complete = serializers.BooleanField()
+    next_step = serializers.JSONField(allow_null=True)
+    completion_percentage = serializers.IntegerField()
+
+
+class AdminDashboardPerformanceSerializer(serializers.Serializer):
+    weakest_classes = serializers.ListField()
+    weakest_subjects = serializers.ListField()
+    weak_students_preview = serializers.ListField()
+
+
+class AdminDashboardComplianceSerializer(serializers.Serializer):
+    low_submission_assignments = serializers.ListField()
+    overdue_assignments = serializers.ListField()
+    compliance_alerts = serializers.ListField()
+
+
+class AdminDashboardInterventionItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    student_id = serializers.IntegerField()
+    student_name = serializers.CharField()
+    class_arm = serializers.CharField(allow_null=True)
+    category = serializers.CharField()
+    priority = serializers.CharField()
+    status = serializers.CharField()
+    due_date = serializers.DateField(allow_null=True)
+    updated_at = serializers.DateTimeField()
+    href = serializers.CharField()
+
+
+class AdminDashboardInterventionsSerializer(serializers.Serializer):
+    open_interventions = AdminDashboardInterventionItemSerializer(many=True)
+    urgent_interventions = AdminDashboardInterventionItemSerializer(many=True)
+
+
+class AdminDashboardTeachersSerializer(serializers.Serializer):
+    teacher_activity_preview = serializers.ListField()
+    teachers_needing_followup = serializers.ListField()
+
+
+class AdminDashboardAuditLogSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    category = serializers.CharField()
+    action = serializers.CharField()
+    actor_email = serializers.EmailField(allow_blank=True)
+    actor_role = serializers.CharField(allow_blank=True)
+    object_type = serializers.CharField(allow_blank=True)
+    object_id = serializers.CharField(allow_blank=True)
+    object_repr = serializers.CharField(allow_blank=True)
+    target_user_email = serializers.EmailField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+
+
+class AdminDashboardAuditSerializer(serializers.Serializer):
+    recent_audit_logs = AdminDashboardAuditLogSerializer(many=True)
+
+
+class AdminDashboardNotificationSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    message = serializers.CharField(allow_blank=True)
+    notification_type = serializers.CharField()
+    priority = serializers.CharField()
+    status = serializers.CharField()
+    target_url = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+
+
+class AdminDashboardQuickActionSerializer(serializers.Serializer):
+    title = serializers.CharField()
+    href = serializers.CharField()
+    priority = serializers.CharField()
+
+
+class AdminDashboardSerializer(serializers.Serializer):
+    summary = AdminDashboardSummarySerializer()
+    setup = AdminDashboardSetupSerializer()
+    performance = AdminDashboardPerformanceSerializer()
+    compliance = AdminDashboardComplianceSerializer()
+    interventions = AdminDashboardInterventionsSerializer()
+    teachers = AdminDashboardTeachersSerializer()
+    audit = AdminDashboardAuditSerializer()
+    notifications = AdminDashboardNotificationSerializer(many=True)
+    quick_actions = AdminDashboardQuickActionSerializer(many=True)
+
+
 class StudentDashboardSummarySerializer(serializers.Serializer):
     pending_assignments_count = serializers.IntegerField()
     overdue_assignments_count = serializers.IntegerField()

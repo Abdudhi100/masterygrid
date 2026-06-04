@@ -420,6 +420,10 @@ Additional seeded workflow suites:
   assignment, teacher opens the upgraded action-center dashboard, sees weak
   student/topic, remediation, intervention, notification sections, and follows
   a quick action link.
+- `21-admin-dashboard-flow.spec.ts`: student submits a low-score seeded
+  assignment, school admin opens the upgraded command-center dashboard, sees
+  setup, risk, compliance, intervention, teacher, notification, and audit
+  sections, and follows a setup quick action.
 
 ## Login Debugging
 

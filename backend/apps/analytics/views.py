@@ -9,6 +9,7 @@ from apps.analytics.permissions import (
     IsTeacherOnlyAnalyticsUser,
 )
 from apps.analytics.serializers import (
+    AdminDashboardSerializer,
     AdminInterventionDashboardSerializer,
     StudentDashboardSerializer,
     StudentProgressReportSerializer,
@@ -18,6 +19,7 @@ from apps.analytics.serializers import (
 from apps.analytics.services import (
     get_admin_assignment_compliance,
     get_admin_class_performance,
+    get_admin_dashboard,
     get_admin_intervention_dashboard,
     get_admin_overview,
     get_admin_subject_performance,
@@ -99,6 +101,16 @@ class AdminOverviewAPIView(APIView):
         return Response(
             get_admin_overview(request.user, school_id=requested_school_id(request))
         )
+
+
+class AdminDashboardAPIView(APIView):
+    permission_classes = [IsSchoolAdminAnalyticsUser]
+
+    def get(self, request):
+        serializer = AdminDashboardSerializer(
+            get_admin_dashboard(request.user, school_id=requested_school_id(request))
+        )
+        return Response(serializer.data)
 
 
 class AdminClassPerformanceAPIView(APIView):

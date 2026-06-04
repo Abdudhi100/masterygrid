@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.academics.models import StudentEnrollment, TeacherClassSubjectAssignment
+from apps.audit.selectors import get_audit_logs_for_user
 from apps.analytics.selectors import (
     get_assignment_expected_students,
     get_assignment_for_analytics,
@@ -37,6 +38,7 @@ from apps.practice.analytics import (
 )
 from apps.practice.models import PracticeSession, PracticeSessionStatus
 from apps.question_bank.models import Question
+from apps.schools.services import get_school_setup_status
 from apps.submissions.selectors import get_student_assignments
 from apps.submissions.models import Submission
 
@@ -49,6 +51,7 @@ STUDENT_DASHBOARD_ASSIGNMENT_LIMIT = 5
 STUDENT_DASHBOARD_RECENT_LIMIT = 5
 STUDENT_DASHBOARD_NOTIFICATION_LIMIT = 5
 TEACHER_DASHBOARD_LIMIT = 5
+ADMIN_DASHBOARD_LIMIT = 5
 LOW_SUBMISSION_RATE_THRESHOLD = 60
 
 
@@ -2120,6 +2123,280 @@ def get_admin_intervention_dashboard(user, school_id=None):
         "weak_student_clusters": weak_student_clusters,
         "assignment_compliance_alerts": assignment_compliance_alerts,
         "recommended_actions": urgent_interventions[:5],
+    }
+
+
+def _admin_dashboard_intervention(intervention, base_role="admin"):
+    return {
+        "id": intervention.id,
+        "title": intervention.title,
+        "student_id": intervention.student_id,
+        "student_name": intervention.student.full_name,
+        "class_arm": (
+            str(intervention.source_class_arm)
+            if intervention.source_class_arm_id
+            else class_arm_name_for_student(intervention.student)
+        ),
+        "category": intervention.category,
+        "priority": intervention.priority,
+        "status": intervention.status,
+        "due_date": intervention.due_date,
+        "updated_at": intervention.updated_at,
+        "href": f"/{base_role}/interventions/{intervention.id}",
+    }
+
+
+def _admin_dashboard_notification(notification):
+    return {
+        "id": notification.id,
+        "title": notification.title,
+        "message": notification.message,
+        "notification_type": notification.notification_type,
+        "priority": notification.priority,
+        "status": notification.status,
+        "target_url": notification.target_url,
+        "created_at": notification.created_at,
+    }
+
+
+def _admin_dashboard_audit_log(log):
+    return {
+        "id": log.id,
+        "category": log.category,
+        "action": log.action,
+        "actor_email": log.actor_email,
+        "actor_role": log.actor_role,
+        "object_type": log.object_type,
+        "object_id": log.object_id,
+        "object_repr": log.object_repr,
+        "target_user_email": log.target_user_email,
+        "created_at": log.created_at,
+    }
+
+
+def _admin_dashboard_quick_actions(
+    *,
+    setup_status,
+    weak_students_count,
+    compliance_alert_count,
+    intervention_count,
+    teacher_followup_count,
+):
+    actions = [
+        {
+            "title": (
+                "Continue setup"
+                if not setup_status["is_setup_complete"]
+                else "Review setup"
+            ),
+            "href": "/admin/setup",
+            "priority": "high"
+            if not setup_status["is_setup_complete"]
+            else "normal",
+        }
+    ]
+    if compliance_alert_count:
+        actions.append(
+            {
+                "title": "Review assignment compliance",
+                "href": "/admin/analytics/compliance",
+                "priority": "high",
+            }
+        )
+    if weak_students_count:
+        actions.append(
+            {
+                "title": "Review weak students",
+                "href": "/admin/analytics/weak-students",
+                "priority": "high",
+            }
+        )
+    if intervention_count:
+        actions.append(
+            {
+                "title": "Manage interventions",
+                "href": "/admin/interventions",
+                "priority": "medium",
+            }
+        )
+    if teacher_followup_count:
+        actions.append(
+            {
+                "title": "Review teacher activity",
+                "href": "/admin/analytics/teachers",
+                "priority": "medium",
+            }
+        )
+
+    actions.extend(
+        [
+            {
+                "title": "Bulk import users",
+                "href": "/admin/imports",
+                "priority": "normal",
+            },
+            {
+                "title": "Review question quality",
+                "href": "/admin/question-bank/quality",
+                "priority": "normal",
+            },
+            {
+                "title": "Open audit logs",
+                "href": "/admin/audit-logs",
+                "priority": "normal",
+            },
+        ]
+    )
+    return actions[:7]
+
+
+def _admin_submission_rate(compliance_rows):
+    expected_total = sum(row["expected_students"] for row in compliance_rows)
+    submitted_total = sum(row["submitted_count"] for row in compliance_rows)
+    return calculate_rate(submitted_total, expected_total)
+
+
+def get_admin_dashboard(user, school_id=None):
+    school = get_school_for_admin(user, school_id)
+    setup_status = get_school_setup_status(user, school_id=school_id)
+    students = get_school_students(school)
+    teachers = get_school_teachers(school)
+    class_arms = get_school_class_arms(school)
+    subjects = get_school_subjects(school)
+    assignments = get_school_assignments(school)
+    class_rows = get_admin_class_performance(user, school_id=school_id)
+    subject_rows = get_admin_subject_performance(user, school_id=school_id)
+    teacher_rows = get_admin_teacher_activity(user, school_id=school_id)
+    weak_students = get_admin_weak_students(user, school_id=school_id)
+    compliance_rows = get_admin_assignment_compliance(user, school_id=school_id)
+    class_interventions = build_class_interventions(class_rows, weak_students)
+    compliance_alerts = build_compliance_alerts(compliance_rows)
+
+    overdue_assignments = [
+        row
+        for row in compliance_rows
+        if row["deadline_status"] in {"overdue", "late_open"}
+    ]
+    low_submission_assignments = [
+        row
+        for row in compliance_rows
+        if row["expected_students"] > 0
+        and row["submission_rate"] < LOW_SUBMISSION_RATE_THRESHOLD
+    ]
+    high_risk_classes = [
+        row
+        for row in class_interventions
+        if row["risk_level"] in {"critical", "high"}
+    ]
+    teachers_needing_followup = [
+        row for row in teacher_rows if row["activity_status"] != "active"
+    ]
+    dashboard_class_rows = sorted(
+        class_rows,
+        key=lambda row: (
+            {"high": 0, "medium": 1, "low": 2}[row["risk_level"]],
+            -row["weak_student_count"],
+            row["average_percentage"],
+            row["submission_rate"],
+        ),
+    )
+    dashboard_subject_rows = sorted(
+        subject_rows,
+        key=lambda row: (
+            {"high": 0, "medium": 1, "low": 2}[row["risk_level"]],
+            -row["weak_topic_count"],
+            row["average_percentage"],
+        ),
+    )
+
+    open_interventions_qs = (
+        get_interventions_for_user(user)
+        .filter(
+            school=school,
+            status__in=[InterventionStatus.OPEN, InterventionStatus.IN_PROGRESS],
+        )
+        .order_by("-updated_at", "-created_at")
+    )
+    urgent_interventions_qs = open_interventions_qs.filter(
+        priority__in=["high", "urgent"],
+    )
+    unread_notifications = list(
+        get_user_notifications(user)
+        .filter(status=NotificationStatus.UNREAD)
+        .order_by("-created_at")[:ADMIN_DASHBOARD_LIMIT]
+    )
+    recent_audit_logs = list(
+        get_audit_logs_for_user(user, school_id=school.id)
+        .order_by("-created_at")[:ADMIN_DASHBOARD_LIMIT]
+    )
+
+    return {
+        "summary": {
+            "setup_completion_percentage": setup_status["completion_percentage"],
+            "students_count": students.count(),
+            "teachers_count": teachers.count(),
+            "class_arms_count": class_arms.count(),
+            "subjects_count": subjects.count(),
+            "published_assignments_count": assignments.filter(
+                status=AssignmentStatus.PUBLISHED,
+            ).count(),
+            "overdue_assignments_count": len(overdue_assignments),
+            "assignment_submission_rate": _admin_submission_rate(compliance_rows),
+            "weak_students_count": len(weak_students),
+            "high_risk_classes_count": len(high_risk_classes),
+            "open_interventions_count": open_interventions_qs.count(),
+            "unread_notifications_count": get_unread_count(user),
+        },
+        "setup": {
+            "is_setup_complete": setup_status["is_setup_complete"],
+            "next_step": setup_status["next_step"],
+            "completion_percentage": setup_status["completion_percentage"],
+        },
+        "performance": {
+            "weakest_classes": dashboard_class_rows[:ADMIN_DASHBOARD_LIMIT],
+            "weakest_subjects": dashboard_subject_rows[:ADMIN_DASHBOARD_LIMIT],
+            "weak_students_preview": weak_students[:ADMIN_DASHBOARD_LIMIT],
+        },
+        "compliance": {
+            "low_submission_assignments": low_submission_assignments[
+                :ADMIN_DASHBOARD_LIMIT
+            ],
+            "overdue_assignments": overdue_assignments[:ADMIN_DASHBOARD_LIMIT],
+            "compliance_alerts": compliance_alerts[:ADMIN_DASHBOARD_LIMIT],
+        },
+        "interventions": {
+            "open_interventions": [
+                _admin_dashboard_intervention(intervention)
+                for intervention in open_interventions_qs[:ADMIN_DASHBOARD_LIMIT]
+            ],
+            "urgent_interventions": [
+                _admin_dashboard_intervention(intervention)
+                for intervention in urgent_interventions_qs[:ADMIN_DASHBOARD_LIMIT]
+            ],
+        },
+        "teachers": {
+            "teacher_activity_preview": teacher_rows[:ADMIN_DASHBOARD_LIMIT],
+            "teachers_needing_followup": teachers_needing_followup[
+                :ADMIN_DASHBOARD_LIMIT
+            ],
+        },
+        "audit": {
+            "recent_audit_logs": [
+                _admin_dashboard_audit_log(log) for log in recent_audit_logs
+            ],
+        },
+        "notifications": [
+            _admin_dashboard_notification(notification)
+            for notification in unread_notifications
+        ],
+        "quick_actions": _admin_dashboard_quick_actions(
+            setup_status=setup_status,
+            weak_students_count=len(weak_students),
+            compliance_alert_count=len(low_submission_assignments)
+            + len(overdue_assignments),
+            intervention_count=open_interventions_qs.count(),
+            teacher_followup_count=len(teachers_needing_followup),
+        ),
     }
 
 

@@ -3,6 +3,7 @@ from django.urls import path
 from apps.analytics.views import (
     AdminAssignmentComplianceAPIView,
     AdminClassPerformanceAPIView,
+    AdminDashboardAPIView,
     AdminInterventionDashboardAPIView,
     AdminOverviewAPIView,
     AdminSubjectPerformanceAPIView,
@@ -22,6 +23,7 @@ from apps.analytics.views import (
 app_name = "analytics"
 
 urlpatterns = [
+    path("admin/dashboard/", AdminDashboardAPIView.as_view(), name="admin-dashboard"),
     path("admin/overview/", AdminOverviewAPIView.as_view(), name="admin-overview"),
     path(
         "admin/class-performance/",

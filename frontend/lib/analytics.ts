@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import type {
   AdminAssignmentCompliance,
   AdminClassPerformance,
+  AdminDashboard,
   AdminInterventionDashboard,
   AdminOverview,
   AdminSubjectPerformance,
@@ -20,6 +21,9 @@ import type {
 
 export const getAdminOverview = () =>
   api.get<AdminOverview>("/analytics/admin/overview/");
+
+export const getAdminDashboard = () =>
+  api.get<AdminDashboard>("/analytics/admin/dashboard/");
 
 export const getAdminClassPerformance = () =>
   api.get<AdminClassPerformance[]>("/analytics/admin/class-performance/");

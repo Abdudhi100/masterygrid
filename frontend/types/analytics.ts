@@ -269,6 +269,108 @@ export type AdminInterventionDashboard = {
   recommended_actions: AdminUrgentIntervention[];
 };
 
+export type AdminDashboardSetupStep = {
+  key: string;
+  label: string;
+  description: string;
+  status: "complete" | "incomplete" | "warning" | string;
+  count: number;
+  required_count: number;
+  action_url: string;
+  recommendation: string;
+};
+
+export type AdminDashboardSummary = {
+  setup_completion_percentage: number;
+  students_count: number;
+  teachers_count: number;
+  class_arms_count: number;
+  subjects_count: number;
+  published_assignments_count: number;
+  overdue_assignments_count: number;
+  assignment_submission_rate: number;
+  weak_students_count: number;
+  high_risk_classes_count: number;
+  open_interventions_count: number;
+  unread_notifications_count: number;
+};
+
+export type AdminDashboardIntervention = {
+  id: number;
+  title: string;
+  student_id: number;
+  student_name: string;
+  class_arm: string | null;
+  category: string;
+  priority: string;
+  status: string;
+  due_date: string | null;
+  updated_at: string;
+  href: string;
+};
+
+export type AdminDashboardNotification = {
+  id: number;
+  title: string;
+  message: string;
+  notification_type: NotificationType;
+  priority: NotificationPriority;
+  status: NotificationStatus;
+  target_url: string;
+  created_at: string;
+};
+
+export type AdminDashboardAuditLog = {
+  id: number;
+  category: string;
+  action: string;
+  actor_email: string;
+  actor_role: string;
+  object_type: string;
+  object_id: string;
+  object_repr: string;
+  target_user_email: string;
+  created_at: string;
+};
+
+export type AdminDashboardQuickAction = {
+  title: string;
+  href: string;
+  priority: "urgent" | "high" | "medium" | "low" | "normal" | string;
+};
+
+export type AdminDashboard = {
+  summary: AdminDashboardSummary;
+  setup: {
+    is_setup_complete: boolean;
+    next_step: AdminDashboardSetupStep | null;
+    completion_percentage: number;
+  };
+  performance: {
+    weakest_classes: AdminClassPerformance[];
+    weakest_subjects: AdminSubjectPerformance[];
+    weak_students_preview: AdminWeakStudent[];
+  };
+  compliance: {
+    low_submission_assignments: AdminAssignmentCompliance[];
+    overdue_assignments: AdminAssignmentCompliance[];
+    compliance_alerts: AdminAssignmentComplianceAlert[];
+  };
+  interventions: {
+    open_interventions: AdminDashboardIntervention[];
+    urgent_interventions: AdminDashboardIntervention[];
+  };
+  teachers: {
+    teacher_activity_preview: AdminTeacherActivity[];
+    teachers_needing_followup: AdminTeacherActivity[];
+  };
+  audit: {
+    recent_audit_logs: AdminDashboardAuditLog[];
+  };
+  notifications: AdminDashboardNotification[];
+  quick_actions: AdminDashboardQuickAction[];
+};
+
 export type StudentDashboardSummary = {
   pending_assignments_count: number;
   overdue_assignments_count: number;
