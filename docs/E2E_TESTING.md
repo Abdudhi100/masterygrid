@@ -413,6 +413,9 @@ Additional seeded workflow suites:
 - `18-audit-logs-flow.spec.ts`: school admin approves a synthetic question,
   opens audit logs, filters by question-bank activity, and verifies the audit
   entry and metadata are visible.
+- `19-student-dashboard-flow.spec.ts`: student submits a seeded assignment,
+  opens the upgraded dashboard, verifies summary, assignments, learning path,
+  practice, notifications, and follows a quick action link.
 
 ## Login Debugging
 

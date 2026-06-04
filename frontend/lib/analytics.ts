@@ -7,6 +7,7 @@ import type {
   AdminSubjectPerformance,
   AdminTeacherActivity,
   AdminWeakStudent,
+  StudentDashboard,
   TeacherAssignmentResults,
   TeacherOverview,
   TeacherRemediationPlan,
@@ -40,6 +41,9 @@ export const getAdminInterventionDashboard = () =>
   api.get<AdminInterventionDashboard>(
     "/analytics/admin/intervention-dashboard/"
   );
+
+export const getStudentDashboard = () =>
+  api.get<StudentDashboard>("/analytics/student/dashboard/");
 
 export const getTeacherOverview = () =>
   api.get<TeacherOverview>("/analytics/teacher/overview/");

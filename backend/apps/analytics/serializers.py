@@ -326,6 +326,104 @@ class AdminInterventionDashboardSerializer(serializers.Serializer):
     recommended_actions = AdminUrgentInterventionSerializer(many=True)
 
 
+class StudentDashboardSummarySerializer(serializers.Serializer):
+    pending_assignments_count = serializers.IntegerField()
+    overdue_assignments_count = serializers.IntegerField()
+    due_soon_assignments_count = serializers.IntegerField()
+    graded_assignments_count = serializers.IntegerField()
+    assignment_average = serializers.FloatField()
+    practice_sessions_count = serializers.IntegerField()
+    practice_average = serializers.FloatField()
+    unread_notifications_count = serializers.IntegerField()
+
+
+class StudentDashboardAssignmentSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    subject_name = serializers.CharField()
+    topic_title = serializers.CharField()
+    class_arm_name = serializers.CharField()
+    question_count = serializers.IntegerField()
+    duration_minutes = serializers.IntegerField(allow_null=True)
+    starts_at = serializers.DateTimeField(allow_null=True)
+    due_at = serializers.DateTimeField(allow_null=True)
+    original_due_at = serializers.DateTimeField(allow_null=True)
+    allow_late_submissions = serializers.BooleanField()
+    late_submission_deadline = serializers.DateTimeField(allow_null=True)
+    deadline_status = serializers.CharField()
+    is_overdue = serializers.BooleanField()
+    is_due_soon = serializers.BooleanField()
+    can_submit_now = serializers.BooleanField()
+    submission_id = serializers.IntegerField(allow_null=True)
+    submission_status = serializers.CharField(allow_null=True)
+    is_late = serializers.BooleanField()
+    submitted_after_due_seconds = serializers.IntegerField(allow_null=True)
+    href = serializers.CharField()
+
+
+class StudentDashboardRecentResultSerializer(serializers.Serializer):
+    submission_id = serializers.IntegerField()
+    assignment_id = serializers.IntegerField()
+    assignment_title = serializers.CharField()
+    subject_name = serializers.CharField()
+    topic_title = serializers.CharField()
+    score = serializers.IntegerField()
+    total_marks = serializers.IntegerField()
+    percentage = serializers.FloatField()
+    submitted_at = serializers.DateTimeField(allow_null=True)
+    graded_at = serializers.DateTimeField(allow_null=True)
+    is_late = serializers.BooleanField()
+    href = serializers.CharField()
+
+
+class StudentDashboardAssignmentsSerializer(serializers.Serializer):
+    pending = StudentDashboardAssignmentSerializer(many=True)
+    due_soon = StudentDashboardAssignmentSerializer(many=True)
+    overdue = StudentDashboardAssignmentSerializer(many=True)
+    recently_graded = StudentDashboardRecentResultSerializer(many=True)
+
+
+class StudentDashboardPracticeSerializer(serializers.Serializer):
+    recent_sessions = serializers.ListField()
+    average = serializers.FloatField()
+    weak_topics = serializers.ListField()
+    strong_topics = serializers.ListField()
+
+
+class StudentDashboardLearningPathSerializer(serializers.Serializer):
+    overall_status = serializers.CharField()
+    headline = serializers.CharField()
+    message = serializers.CharField()
+    recommended_next_action = serializers.JSONField(allow_null=True)
+    top_topic_card = serializers.JSONField(allow_null=True)
+
+
+class StudentDashboardNotificationSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    message = serializers.CharField(allow_blank=True)
+    notification_type = serializers.CharField()
+    priority = serializers.CharField()
+    status = serializers.CharField()
+    target_url = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+
+
+class StudentDashboardQuickActionSerializer(serializers.Serializer):
+    title = serializers.CharField()
+    href = serializers.CharField()
+    priority = serializers.CharField()
+
+
+class StudentDashboardSerializer(serializers.Serializer):
+    summary = StudentDashboardSummarySerializer()
+    assignments = StudentDashboardAssignmentsSerializer()
+    practice = StudentDashboardPracticeSerializer()
+    learning_path = StudentDashboardLearningPathSerializer()
+    notifications = StudentDashboardNotificationSerializer(many=True)
+    quick_actions = StudentDashboardQuickActionSerializer(many=True)
+
+
 class StudentProgressProfileSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     full_name = serializers.CharField()

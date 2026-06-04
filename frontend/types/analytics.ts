@@ -1,3 +1,16 @@
+import type { AssignmentDeadlineStatus } from "@/types/academics";
+import type {
+  LearningPathStatus,
+  LearningPathTopicCard,
+  PracticeRecentSession,
+  PracticeTopicPerformance
+} from "@/types/practice";
+import type {
+  NotificationPriority,
+  NotificationStatus,
+  NotificationType
+} from "@/types/notifications";
+
 export type AdminRecentAssignment = {
   id: number;
   title: string;
@@ -254,6 +267,98 @@ export type AdminInterventionDashboard = {
   weak_student_clusters: AdminWeakStudentCluster[];
   assignment_compliance_alerts: AdminAssignmentComplianceAlert[];
   recommended_actions: AdminUrgentIntervention[];
+};
+
+export type StudentDashboardSummary = {
+  pending_assignments_count: number;
+  overdue_assignments_count: number;
+  due_soon_assignments_count: number;
+  graded_assignments_count: number;
+  assignment_average: number;
+  practice_sessions_count: number;
+  practice_average: number;
+  unread_notifications_count: number;
+};
+
+export type StudentDashboardAssignment = {
+  id: number;
+  title: string;
+  subject_name: string;
+  topic_title: string;
+  class_arm_name: string;
+  question_count: number;
+  duration_minutes: number | null;
+  starts_at: string | null;
+  due_at: string | null;
+  original_due_at: string | null;
+  allow_late_submissions: boolean;
+  late_submission_deadline: string | null;
+  deadline_status: AssignmentDeadlineStatus;
+  is_overdue: boolean;
+  is_due_soon: boolean;
+  can_submit_now: boolean;
+  submission_id: number | null;
+  submission_status: string | null;
+  is_late: boolean;
+  submitted_after_due_seconds: number | null;
+  href: string;
+};
+
+export type StudentDashboardRecentResult = {
+  submission_id: number;
+  assignment_id: number;
+  assignment_title: string;
+  subject_name: string;
+  topic_title: string;
+  score: number;
+  total_marks: number;
+  percentage: number;
+  submitted_at: string | null;
+  graded_at: string | null;
+  is_late: boolean;
+  href: string;
+};
+
+export type StudentDashboardNotification = {
+  id: number;
+  title: string;
+  message: string;
+  notification_type: NotificationType;
+  priority: NotificationPriority;
+  status: NotificationStatus;
+  target_url: string;
+  created_at: string;
+};
+
+export type StudentDashboardQuickAction = {
+  title: string;
+  href: string;
+  priority: "urgent" | "high" | "medium" | "low" | "normal" | string;
+};
+
+export type StudentDashboard = {
+  summary: StudentDashboardSummary;
+  assignments: {
+    pending: StudentDashboardAssignment[];
+    due_soon: StudentDashboardAssignment[];
+    overdue: StudentDashboardAssignment[];
+    recently_graded: StudentDashboardRecentResult[];
+  };
+  practice: {
+    recent_sessions: PracticeRecentSession[];
+    average: number;
+    weak_topics: PracticeTopicPerformance[];
+    strong_topics: PracticeTopicPerformance[];
+  };
+  learning_path: {
+    overall_status: LearningPathStatus;
+    headline: string;
+    message: string;
+    recommended_next_action: LearningPathTopicCard | null;
+    top_topic_card: LearningPathTopicCard | null;
+  };
+  notifications: StudentDashboardNotification[];
+  quick_actions: StudentDashboardQuickAction[];
 };
 
 export type TeacherRecentAssignment = {

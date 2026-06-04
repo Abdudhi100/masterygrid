@@ -24,12 +24,18 @@ from apps.analytics.selectors import (
     get_teacher_student_submissions,
     get_teacher_students,
 )
-from apps.assignments.services import get_deadline_status
+from apps.assignments.services import get_assignment_availability, get_deadline_status
 from apps.common.choices import AssignmentStatus, SubmissionStatus, UserRole
 from apps.common.choices import QuestionStatus
-from apps.practice.analytics import get_student_learning_path
+from apps.notifications.models import NotificationStatus
+from apps.notifications.selectors import get_unread_count, get_user_notifications
+from apps.practice.analytics import (
+    get_student_learning_path,
+    get_student_practice_dashboard,
+)
 from apps.practice.models import PracticeSession, PracticeSessionStatus
 from apps.question_bank.models import Question
+from apps.submissions.selectors import get_student_assignments
 from apps.submissions.models import Submission
 
 
@@ -37,6 +43,9 @@ LOW_SCORE_THRESHOLD = 40
 WEAK_TOPIC_THRESHOLD = 50
 REMEDIATION_DEFAULT_LIMIT = 8
 ADMIN_INTERVENTION_LIMIT = 10
+STUDENT_DASHBOARD_ASSIGNMENT_LIMIT = 5
+STUDENT_DASHBOARD_RECENT_LIMIT = 5
+STUDENT_DASHBOARD_NOTIFICATION_LIMIT = 5
 
 
 RISK_LEVEL_WEIGHT = {
@@ -2242,6 +2251,269 @@ def _progress_recommendations(weak_topics, missed_assignments, profile, limit=5)
         )
 
     return recommendations[:limit]
+
+
+def _student_assignment_submission(assignment):
+    submissions = getattr(assignment, "student_submissions", None)
+    if submissions is not None:
+        return submissions[0] if submissions else None
+    return None
+
+
+def _is_completed_submission(submission):
+    return bool(
+        submission
+        and submission.status
+        in {
+            SubmissionStatus.SUBMITTED,
+            SubmissionStatus.GRADED,
+            SubmissionStatus.AUTO_SUBMITTED,
+        }
+    )
+
+
+def _student_assignment_href(assignment, submission):
+    if submission and submission.status in {
+        SubmissionStatus.SUBMITTED,
+        SubmissionStatus.GRADED,
+        SubmissionStatus.AUTO_SUBMITTED,
+    }:
+        return (
+            f"/student/assignments/{assignment.id}/result"
+            f"?submissionId={submission.id}"
+        )
+    if submission and submission.status == SubmissionStatus.IN_PROGRESS:
+        return (
+            f"/student/assignments/{assignment.id}/attempt"
+            f"?submissionId={submission.id}"
+        )
+    return f"/student/assignments/{assignment.id}"
+
+
+def _student_dashboard_assignment_item(assignment):
+    submission = _student_assignment_submission(assignment)
+    availability = get_assignment_availability(assignment)
+    deadline_status = get_deadline_status(assignment, submission=submission)
+    completed = _is_completed_submission(submission)
+    return {
+        "id": assignment.id,
+        "title": assignment.title,
+        "subject_name": assignment.subject.name,
+        "topic_title": assignment.topic.title,
+        "class_arm_name": str(assignment.class_arm),
+        "question_count": assignment.question_count,
+        "duration_minutes": assignment.duration_minutes,
+        "starts_at": assignment.starts_at,
+        "due_at": assignment.due_at,
+        "original_due_at": assignment.original_due_at,
+        "allow_late_submissions": assignment.allow_late_submissions,
+        "late_submission_deadline": assignment.late_submission_deadline,
+        "deadline_status": deadline_status,
+        "is_overdue": availability["is_overdue"],
+        "is_due_soon": availability["is_due_soon"],
+        "can_submit_now": (
+            False if completed else availability["can_submit_now"]
+        ),
+        "submission_id": submission.id if submission else None,
+        "submission_status": submission.status if submission else None,
+        "is_late": bool(submission and submission.is_late),
+        "submitted_after_due_seconds": (
+            submission.submitted_after_due_seconds if submission else None
+        ),
+        "href": _student_assignment_href(assignment, submission),
+    }
+
+
+def _student_dashboard_recent_result(submission):
+    assignment = submission.assignment
+    return {
+        "submission_id": submission.id,
+        "assignment_id": assignment.id,
+        "assignment_title": assignment.title,
+        "subject_name": assignment.subject.name,
+        "topic_title": assignment.topic.title,
+        "score": submission.score,
+        "total_marks": submission.total_marks,
+        "percentage": percentage_value(submission.percentage),
+        "submitted_at": submission.submitted_at,
+        "graded_at": submission.graded_at,
+        "is_late": submission.is_late,
+        "href": (
+            f"/student/assignments/{assignment.id}/result"
+            f"?submissionId={submission.id}"
+        ),
+    }
+
+
+def _student_dashboard_notification(notification):
+    return {
+        "id": notification.id,
+        "title": notification.title,
+        "message": notification.message,
+        "notification_type": notification.notification_type,
+        "priority": notification.priority,
+        "status": notification.status,
+        "target_url": notification.target_url,
+        "created_at": notification.created_at,
+    }
+
+
+def _practice_href_from_learning_path_card(card):
+    if not card:
+        return "/student/practice"
+
+    payload = card.get("action_payload", {})
+    query = urlencode(
+        {
+            "subject": payload.get("subject") or card.get("subject_id") or "",
+            "topic": payload.get("topic") or card.get("topic_id") or "",
+            "difficulty": payload.get("difficulty") or card.get("difficulty") or "mixed",
+            "question_count": (
+                payload.get("question_count")
+                or card.get("recommended_question_count")
+                or 5
+            ),
+        }
+    )
+    return f"/student/practice?{query}"
+
+
+def _student_dashboard_quick_actions(*, overdue_items, due_soon_items, learning_path):
+    actions = []
+    if overdue_items:
+        actions.append(
+            {
+                "title": "Review overdue assignments",
+                "href": "/student/assignments",
+                "priority": "urgent",
+            }
+        )
+    if due_soon_items:
+        actions.append(
+            {
+                "title": "Finish assignments due soon",
+                "href": "/student/assignments",
+                "priority": "high",
+            }
+        )
+
+    next_action = learning_path["recommended_next_action"]
+    if next_action:
+        actions.append(
+            {
+                "title": "Start recommended practice",
+                "href": _practice_href_from_learning_path_card(next_action),
+                "priority": next_action["priority"],
+            }
+        )
+
+    actions.extend(
+        [
+            {
+                "title": "Open learning path",
+                "href": "/student/learning-path",
+                "priority": "normal",
+            },
+            {
+                "title": "View practice analytics",
+                "href": "/student/practice/analytics",
+                "priority": "normal",
+            },
+        ]
+    )
+    return actions[:5]
+
+
+def get_student_dashboard(student):
+    assignments = list(get_student_assignments(student))
+    assignment_items = [_student_dashboard_assignment_item(item) for item in assignments]
+    pending_items = [
+        item
+        for item in assignment_items
+        if item["submission_status"]
+        not in {
+            SubmissionStatus.SUBMITTED,
+            SubmissionStatus.GRADED,
+            SubmissionStatus.AUTO_SUBMITTED,
+        }
+    ]
+    due_soon_items = [
+        item for item in pending_items if item["deadline_status"] == "due_soon"
+    ]
+    overdue_items = [
+        item
+        for item in pending_items
+        if item["deadline_status"] in {"overdue", "late_open"}
+    ]
+
+    graded_submissions = _graded_assignment_submissions_for_progress(
+        get_student_assignments(student),
+        student,
+    )
+    assignment_score = sum(submission.score for submission in graded_submissions)
+    assignment_total_marks = sum(submission.total_marks for submission in graded_submissions)
+    assignment_average = _report_average(
+        _weighted_average_from_scores(assignment_score, assignment_total_marks)
+    )
+
+    practice_dashboard = get_student_practice_dashboard(student)
+    practice_summary = practice_dashboard["summary"]
+    learning_path = get_student_learning_path(student)
+    unread_notifications = list(
+        get_user_notifications(student)
+        .filter(status=NotificationStatus.UNREAD)
+        .order_by("-created_at")[:STUDENT_DASHBOARD_NOTIFICATION_LIMIT]
+    )
+
+    return {
+        "summary": {
+            "pending_assignments_count": len(pending_items),
+            "overdue_assignments_count": len(overdue_items),
+            "due_soon_assignments_count": len(due_soon_items),
+            "graded_assignments_count": len(graded_submissions),
+            "assignment_average": assignment_average,
+            "practice_sessions_count": practice_summary["total_sessions_completed"],
+            "practice_average": _report_average(
+                practice_summary["overall_average_percentage"]
+            ),
+            "unread_notifications_count": get_unread_count(student),
+        },
+        "assignments": {
+            "pending": pending_items[:STUDENT_DASHBOARD_ASSIGNMENT_LIMIT],
+            "due_soon": due_soon_items[:STUDENT_DASHBOARD_ASSIGNMENT_LIMIT],
+            "overdue": overdue_items[:STUDENT_DASHBOARD_ASSIGNMENT_LIMIT],
+            "recently_graded": [
+                _student_dashboard_recent_result(submission)
+                for submission in graded_submissions[:STUDENT_DASHBOARD_RECENT_LIMIT]
+            ],
+        },
+        "practice": {
+            "recent_sessions": practice_dashboard["recent_sessions"][
+                :STUDENT_DASHBOARD_RECENT_LIMIT
+            ],
+            "average": _report_average(practice_summary["overall_average_percentage"]),
+            "weak_topics": practice_dashboard["weak_topics"][:5],
+            "strong_topics": practice_dashboard["strong_topics"][:5],
+        },
+        "learning_path": {
+            "overall_status": learning_path["overall_status"],
+            "headline": learning_path["headline"],
+            "message": learning_path["message"],
+            "recommended_next_action": learning_path["recommended_next_action"],
+            "top_topic_card": learning_path["topic_cards"][0]
+            if learning_path["topic_cards"]
+            else None,
+        },
+        "notifications": [
+            _student_dashboard_notification(notification)
+            for notification in unread_notifications
+        ],
+        "quick_actions": _student_dashboard_quick_actions(
+            overdue_items=overdue_items,
+            due_soon_items=due_soon_items,
+            learning_path=learning_path,
+        ),
+    }
 
 
 def get_student_progress_report(user, student_id, school_id=None):
