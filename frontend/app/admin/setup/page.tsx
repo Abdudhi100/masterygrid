@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { StatCard } from "@/components/ui/StatCard";
 import { ApiError } from "@/lib/api";
@@ -98,7 +99,13 @@ export default function AdminSetupWizardPage() {
   }
 
   if (error) {
-    return <EmptyState title="Setup wizard unavailable" description={error} />;
+    return (
+      <ErrorState
+        title="Setup wizard unavailable"
+        description={error}
+        dashboardHref="/admin/dashboard"
+      />
+    );
   }
 
   if (!status) {

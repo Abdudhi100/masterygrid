@@ -68,6 +68,12 @@ cd frontend
 npm.cmd run e2e
 ```
 
+For a quick post-deploy smoke check:
+
+```powershell
+npm.cmd run e2e:smoke
+```
+
 Useful variants:
 
 ```powershell
@@ -160,9 +166,8 @@ tests to create data against a production-like target.
 
 The E2E workflow can run in two modes:
 
-- `smoke`: runs only `01-auth-smoke.spec.ts`.
-- `full`: runs `01` through `18`, including
-  seeded/mutating tests.
+- `smoke`: runs `00-health.spec.ts` and `01-auth-smoke.spec.ts`.
+- `full`: runs `00` through `21`, including seeded/mutating tests.
 
 Pushes to `main` run smoke E2E only when the required secrets exist. If secrets
 are missing, the workflow prints a clear skip message and exits successfully.
@@ -348,7 +353,13 @@ the dry-run output.
 
 ## Current Coverage
 
-The first suite is `e2e/tests/01-auth-smoke.spec.ts`:
+The first smoke suite is `e2e/tests/00-health.spec.ts`:
+
+- calls backend `/api/health/`
+- confirms health status and database status are `ok`
+- opens the frontend login page and verifies the login shell renders
+
+The auth smoke suite is `e2e/tests/01-auth-smoke.spec.ts`:
 
 - school admin can log in and reaches `/admin/dashboard`
 - teacher can log in and reaches `/teacher/dashboard`

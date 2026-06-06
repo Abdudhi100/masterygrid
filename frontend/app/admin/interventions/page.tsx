@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { StatCard } from "@/components/ui/StatCard";
 import { getAdminInterventionDashboard } from "@/lib/analytics";
@@ -357,7 +358,13 @@ export default function AdminInterventionsPage() {
   }
 
   if (error) {
-    return <EmptyState title="Interventions unavailable" description={error} />;
+    return (
+      <ErrorState
+        title="Interventions unavailable"
+        description={error}
+        dashboardHref="/admin/dashboard"
+      />
+    );
   }
 
   if (!dashboard) {

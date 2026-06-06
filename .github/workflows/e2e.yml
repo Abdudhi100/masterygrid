@@ -86,10 +86,10 @@ jobs:
           fi
 
           if [ "$run_full" = "true" ]; then
-            echo "specs=e2e/tests/01-auth-smoke.spec.ts e2e/tests/02-seeded-practice-setup.spec.ts e2e/tests/03-student-practice-flow.spec.ts e2e/tests/04-assignment-flow.spec.ts e2e/tests/05-question-import-flow.spec.ts e2e/tests/06-zip-diagram-import-flow.spec.ts e2e/tests/07-learning-path-flow.spec.ts e2e/tests/08-teacher-remediation-flow.spec.ts e2e/tests/09-admin-intervention-dashboard.spec.ts e2e/tests/10-student-progress-report.spec.ts e2e/tests/11-student-progress-print.spec.ts e2e/tests/12-intervention-tracking-flow.spec.ts e2e/tests/13-notifications-flow.spec.ts e2e/tests/14-assignment-deadline-flow.spec.ts e2e/tests/15-bulk-user-import-flow.spec.ts e2e/tests/16-question-quality-dashboard.spec.ts e2e/tests/17-school-setup-wizard.spec.ts e2e/tests/18-audit-logs-flow.spec.ts e2e/tests/19-student-dashboard-flow.spec.ts e2e/tests/20-teacher-dashboard-flow.spec.ts e2e/tests/21-admin-dashboard-flow.spec.ts" >> "$GITHUB_OUTPUT"
+            echo "specs=e2e/tests/00-health.spec.ts e2e/tests/01-auth-smoke.spec.ts e2e/tests/02-seeded-practice-setup.spec.ts e2e/tests/03-student-practice-flow.spec.ts e2e/tests/04-assignment-flow.spec.ts e2e/tests/05-question-import-flow.spec.ts e2e/tests/06-zip-diagram-import-flow.spec.ts e2e/tests/07-learning-path-flow.spec.ts e2e/tests/08-teacher-remediation-flow.spec.ts e2e/tests/09-admin-intervention-dashboard.spec.ts e2e/tests/10-student-progress-report.spec.ts e2e/tests/11-student-progress-print.spec.ts e2e/tests/12-intervention-tracking-flow.spec.ts e2e/tests/13-notifications-flow.spec.ts e2e/tests/14-assignment-deadline-flow.spec.ts e2e/tests/15-bulk-user-import-flow.spec.ts e2e/tests/16-question-quality-dashboard.spec.ts e2e/tests/17-school-setup-wizard.spec.ts e2e/tests/18-audit-logs-flow.spec.ts e2e/tests/19-student-dashboard-flow.spec.ts e2e/tests/20-teacher-dashboard-flow.spec.ts e2e/tests/21-admin-dashboard-flow.spec.ts" >> "$GITHUB_OUTPUT"
             echo "Running full seeded E2E suite."
           else
-            echo "specs=e2e/tests/01-auth-smoke.spec.ts" >> "$GITHUB_OUTPUT"
+            echo "specs=e2e/tests/00-health.spec.ts e2e/tests/01-auth-smoke.spec.ts" >> "$GITHUB_OUTPUT"
             echo "Running smoke E2E suite."
           fi
 

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ApiError } from "@/lib/api";
 import { getAuditLogs } from "@/lib/audit";
@@ -159,7 +160,11 @@ export default function AdminAuditLogsPage() {
       {isLoading ? <LoadingState label="Loading audit logs..." /> : null}
 
       {error && !isLoading ? (
-        <EmptyState title="Audit logs unavailable" description={error} />
+        <ErrorState
+          title="Audit logs unavailable"
+          description={error}
+          dashboardHref="/admin/dashboard"
+        />
       ) : null}
 
       {!isLoading && !error && !logs.length ? (

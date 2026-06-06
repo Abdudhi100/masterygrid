@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { StatCard } from "@/components/ui/StatCard";
 import { ApiError } from "@/lib/api";
@@ -231,14 +232,21 @@ export default function StudentDashboardPage() {
   }
 
   if (error) {
-    return <EmptyState title="Dashboard unavailable" description={error} />;
+    return (
+      <ErrorState
+        title="Dashboard unavailable"
+        description={error}
+        dashboardHref="/student/dashboard"
+      />
+    );
   }
 
   if (!dashboard) {
     return (
-      <EmptyState
+      <ErrorState
         title="Dashboard unavailable"
         description="Your learning dashboard could not be loaded."
+        dashboardHref="/student/dashboard"
       />
     );
   }

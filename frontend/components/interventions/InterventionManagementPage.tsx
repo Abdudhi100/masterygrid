@@ -6,6 +6,7 @@ import { InterventionList } from "@/components/interventions/InterventionList";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Select } from "@/components/ui/Select";
@@ -56,7 +57,13 @@ export function InterventionManagementPage({
   }, [loadInterventions]);
 
   if (error && !interventions.length) {
-    return <EmptyState title="Interventions unavailable" description={error} />;
+    return (
+      <ErrorState
+        title="Interventions unavailable"
+        description={error}
+        dashboardHref={`/${baseRole}/dashboard`}
+      />
+    );
   }
 
   return (

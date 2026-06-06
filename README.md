@@ -145,6 +145,9 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Render/Railway backend setup,
 Vercel frontend setup, required environment variables, and the production safety
 checklist.
 
+For school demos and pilot rollout checks, see
+[docs/PILOT_READINESS.md](docs/PILOT_READINESS.md).
+
 ## API Documentation
 
 When the server is running:

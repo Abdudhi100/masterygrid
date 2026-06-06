@@ -225,10 +225,15 @@ def get_student_recent_practice(student, limit=10):
     ]
 
 
-def get_student_weak_topics(student, limit=5):
+def get_student_weak_topics(student, limit=5, topic_performance=None):
+    rows = (
+        topic_performance
+        if topic_performance is not None
+        else get_student_topic_performance(student)
+    )
     weak_topics = [
         row
-        for row in get_student_topic_performance(student)
+        for row in rows
         if row["average_percentage"] is not None
         and row["average_percentage"] < 50
         and _meets_topic_threshold(row)
@@ -239,10 +244,15 @@ def get_student_weak_topics(student, limit=5):
     )[:limit]
 
 
-def get_student_strong_topics(student, limit=5):
+def get_student_strong_topics(student, limit=5, topic_performance=None):
+    rows = (
+        topic_performance
+        if topic_performance is not None
+        else get_student_topic_performance(student)
+    )
     strong_topics = [
         row
-        for row in get_student_topic_performance(student)
+        for row in rows
         if row["average_percentage"] is not None
         and row["average_percentage"] >= 70
         and _meets_topic_threshold(row)
@@ -360,12 +370,18 @@ def _recommendation_from_performance(row, availability, priority, reason):
     }
 
 
-def get_student_practice_recommendations(student, limit=5):
+def get_student_practice_recommendations(student, limit=5, topic_performance=None):
     availability_by_topic = _approved_question_counts_by_topic(student)
+    if topic_performance is None:
+        topic_performance = get_student_topic_performance(student)
     recommendations = []
     used_topic_ids = set()
 
-    for row in get_student_weak_topics(student, limit=limit * 2):
+    for row in get_student_weak_topics(
+        student,
+        limit=limit * 2,
+        topic_performance=topic_performance,
+    ):
         availability = availability_by_topic.get(row["topic_id"])
         if not availability:
             continue
@@ -386,7 +402,7 @@ def get_student_practice_recommendations(student, limit=5):
 
     average_topics = [
         row
-        for row in get_student_topic_performance(student)
+        for row in topic_performance
         if row["topic_id"] not in used_topic_ids
         and row["average_percentage"] is not None
         and 50 <= row["average_percentage"] < 70
@@ -415,7 +431,7 @@ def get_student_practice_recommendations(student, limit=5):
             return recommendations
 
     practiced_topic_ids = {
-        row["topic_id"] for row in get_student_topic_performance(student)
+        row["topic_id"] for row in topic_performance
     }
     unpracticed_topics = [
         row
@@ -606,7 +622,11 @@ def get_student_learning_path(student, limit=8):
         )
         used_topic_ids.add(availability["topic_id"])
 
-    for row in get_student_weak_topics(student, limit=limit * 2):
+    for row in get_student_weak_topics(
+        student,
+        limit=limit * 2,
+        topic_performance=topic_performance,
+    ):
         availability = availability_by_topic.get(row["topic_id"])
         if availability:
             add_card("weak_topic", "high", availability, row)
@@ -640,7 +660,11 @@ def get_student_learning_path(student, limit=8):
     for availability in unpracticed_topics:
         add_card("new_topic", "low", availability)
 
-    for row in get_student_strong_topics(student, limit=limit * 2):
+    for row in get_student_strong_topics(
+        student,
+        limit=limit * 2,
+        topic_performance=topic_performance,
+    ):
         availability = availability_by_topic.get(row["topic_id"])
         if availability:
             add_card("challenge", "low", availability, row)
@@ -656,14 +680,24 @@ def get_student_learning_path(student, limit=8):
 
 def get_student_practice_dashboard(student):
     summary = get_student_practice_summary(student)
+    topic_performance = get_student_topic_performance(student)
     has_history = summary["total_sessions_completed"] > 0
     return {
         "summary": summary,
         "subject_performance": get_student_subject_performance(student),
-        "topic_performance": get_student_topic_performance(student),
-        "weak_topics": get_student_weak_topics(student),
-        "strong_topics": get_student_strong_topics(student),
-        "recommendations": get_student_practice_recommendations(student),
+        "topic_performance": topic_performance,
+        "weak_topics": get_student_weak_topics(
+            student,
+            topic_performance=topic_performance,
+        ),
+        "strong_topics": get_student_strong_topics(
+            student,
+            topic_performance=topic_performance,
+        ),
+        "recommendations": get_student_practice_recommendations(
+            student,
+            topic_performance=topic_performance,
+        ),
         "recent_sessions": get_student_recent_practice(student),
         "message": (
             ""

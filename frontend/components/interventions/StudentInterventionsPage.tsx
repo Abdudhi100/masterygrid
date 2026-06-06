@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ApiError } from "@/lib/api";
 import { getStudentProgressReport } from "@/lib/analytics";
@@ -59,7 +60,13 @@ export function StudentInterventionsPage({
   }
 
   if (error) {
-    return <EmptyState title="Interventions unavailable" description={error} />;
+    return (
+      <ErrorState
+        title="Interventions unavailable"
+        description={error}
+        dashboardHref={`/${baseRole}/dashboard`}
+      />
+    );
   }
 
   return (

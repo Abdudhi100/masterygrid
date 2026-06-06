@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ApiError } from "@/lib/api";
 import {
@@ -203,7 +204,13 @@ export default function QuestionQualityDashboardPage() {
   }
 
   if (error && !dashboard) {
-    return <EmptyState title="Question quality unavailable" description={error} />;
+    return (
+      <ErrorState
+        title="Question quality unavailable"
+        description={error}
+        dashboardHref="/admin/dashboard"
+      />
+    );
   }
 
   if (!dashboard) {
