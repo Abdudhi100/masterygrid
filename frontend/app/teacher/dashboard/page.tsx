@@ -13,6 +13,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { StatCard } from "@/components/ui/StatCard";
 import { getTeacherDashboard } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
+import { isDemoModeEnabled } from "@/lib/demoMode";
 import type {
   RemediationTopicCard,
   TeacherDashboard,
@@ -364,6 +365,11 @@ export default function TeacherDashboardPage() {
             <Link href="/teacher/interventions">
               <Button variant="secondary">Interventions</Button>
             </Link>
+            {isDemoModeEnabled ? (
+              <Link href="/demo-guide">
+                <Button variant="secondary">Open Demo Guide</Button>
+              </Link>
+            ) : null}
           </div>
         }
       />

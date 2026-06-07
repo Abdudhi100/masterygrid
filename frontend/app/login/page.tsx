@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { APP_NAME } from "@/lib/constants";
+import { demoAccounts, isDemoModeEnabled, type DemoAccount } from "@/lib/demoMode";
 import { dashboardPathForRole } from "@/lib/routes";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
@@ -44,6 +45,12 @@ function LoginForm() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function selectDemoAccount(account: DemoAccount) {
+    setEmail(account.email);
+    setPassword(account.password);
+    setError("");
   }
 
   return (
@@ -88,6 +95,38 @@ function LoginForm() {
               Sign in
             </Button>
           </form>
+
+          {isDemoModeEnabled ? (
+            <section
+              data-testid="demo-login-panel"
+              className="mt-6 rounded-lg border border-brand-100 bg-brand-50 p-4"
+            >
+              <div>
+                <p className="text-sm font-semibold text-brand-700">Try Demo</p>
+                <p className="mt-1 text-sm leading-6 text-muted">
+                  Pick a seeded demo user to fill the form, then click Sign in.
+                </p>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {demoAccounts.map((account) => (
+                  <button
+                    key={account.key}
+                    type="button"
+                    data-testid={`demo-login-${account.key}`}
+                    onClick={() => selectDemoAccount(account)}
+                    className="rounded-md border border-line bg-white px-3 py-2 text-left transition hover:border-brand-200 hover:bg-white/80"
+                  >
+                    <span className="block text-sm font-semibold text-ink">
+                      {account.label}
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted">
+                      {account.email}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
       </section>
 

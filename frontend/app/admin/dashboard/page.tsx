@@ -18,6 +18,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { StatCard } from "@/components/ui/StatCard";
 import { getAdminDashboard } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
+import { isDemoModeEnabled } from "@/lib/demoMode";
 import type {
   AdminAssignmentCompliance,
   AdminClassPerformance,
@@ -396,6 +397,11 @@ export default function AdminDashboardPage() {
             <Link href="/admin/analytics">
               <Button variant="secondary">Analytics</Button>
             </Link>
+            {isDemoModeEnabled ? (
+              <Link href="/demo-guide">
+                <Button variant="secondary">Open Demo Guide</Button>
+              </Link>
+            ) : null}
           </div>
         }
       />

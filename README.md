@@ -106,7 +106,8 @@ cd backend
 ```
 
 See [docs/DEMO_DATA.md](docs/DEMO_DATA.md) for credentials and the recommended
-test flow.
+test flow. To enable the guarded login demo panel and walkthrough guide, see
+[docs/DEMO_MODE.md](docs/DEMO_MODE.md).
 
 ## Question Import
 

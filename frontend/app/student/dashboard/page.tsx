@@ -13,6 +13,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { StatCard } from "@/components/ui/StatCard";
 import { ApiError } from "@/lib/api";
 import { getStudentDashboard } from "@/lib/analytics";
+import { isDemoModeEnabled } from "@/lib/demoMode";
 import type {
   StudentDashboard,
   StudentDashboardAssignment,
@@ -275,6 +276,11 @@ export default function StudentDashboardPage() {
             <Link href="/student/learning-path">
               <Button variant="secondary">Learning Path</Button>
             </Link>
+            {isDemoModeEnabled ? (
+              <Link href="/demo-guide">
+                <Button variant="secondary">Open Demo Guide</Button>
+              </Link>
+            ) : null}
           </div>
         }
       />

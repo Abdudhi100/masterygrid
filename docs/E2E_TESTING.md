@@ -436,6 +436,15 @@ Additional seeded workflow suites:
   setup, risk, compliance, intervention, teacher, notification, and audit
   sections, and follows a setup quick action.
 
+Optional demo-mode suite:
+
+- `22-demo-mode-flow.spec.ts`: when `NEXT_PUBLIC_ENABLE_DEMO_MODE=true`, opens
+  login, verifies the Try Demo panel, fills Student 1 demo credentials, signs
+  in, and reaches the student dashboard.
+
+The demo-mode suite is not included in the default GitHub E2E full suite because
+the frontend must be built or served with `NEXT_PUBLIC_ENABLE_DEMO_MODE=true`.
+
 ## Login Debugging
 
 The UI login helper waits for `/api/auth/token/`, captures its status/body, then
