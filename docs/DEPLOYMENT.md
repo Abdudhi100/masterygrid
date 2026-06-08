@@ -55,6 +55,8 @@ DEBUG=False
 ALLOWED_HOSTS=<backend-hosts-without-protocol>
 CORS_ALLOWED_ORIGINS=<frontend-origins-with-protocol>
 CSRF_TRUSTED_ORIGINS=<trusted-origins-with-protocol>
+FRONTEND_URL=<frontend-origin>
+DATABASE_URL=<managed-postgres-url>
 DATABASE_NAME=<database name>
 DATABASE_USER=<database user>
 DATABASE_PASSWORD=<database password>
@@ -66,10 +68,15 @@ SECURE_SSL_REDIRECT=True
 SESSION_COOKIE_SECURE=True
 CSRF_COOKIE_SECURE=True
 DEFAULT_FROM_EMAIL=MasteryGrid <noreply@your-domain.com>
+AI_GENERATION_ENABLED=False
+OPENAI_API_KEY=<required-only-if-ai-generation-is-enabled>
 ```
 
 `DATABASE_URL` is also supported. If your host provides it, you can set that
 instead of the split `DATABASE_*` variables.
+
+AI suggestions are optional. Keep `AI_GENERATION_ENABLED=False` unless
+`OPENAI_API_KEY` and AI usage limits are configured intentionally.
 
 ## CORS, CSRF, And Hosts
 
@@ -195,11 +202,48 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000
 
    ```text
    NEXT_PUBLIC_API_BASE_URL=https://your-backend-host/api
+   NEXT_PUBLIC_ENABLE_DEMO_MODE=false
    ```
 
 6. Deploy.
 7. Copy the Vercel production URL into backend `CORS_ALLOWED_ORIGINS` and
    `CSRF_TRUSTED_ORIGINS`, then redeploy the backend if needed.
+
+Keep `NEXT_PUBLIC_ENABLE_DEMO_MODE=false` for real production. Enable it only on
+local, staging, preview, or disposable demo deployments.
+
+## Post-Deploy Checklist
+
+1. Run migrations:
+
+   ```bash
+   python manage.py migrate
+   ```
+
+2. Create a superuser or school admin:
+
+   ```bash
+   python manage.py createsuperuser
+   ```
+
+3. Confirm health:
+
+   ```bash
+   curl https://your-backend-host/api/health/
+   ```
+
+4. Log in as school admin and open `/admin/setup`.
+5. Import or approve at least one trusted question-bank question.
+6. Publish and submit a short assignment.
+7. Start and submit one practice session.
+8. Run smoke E2E against the deployed URLs:
+
+   ```bash
+   npm run e2e:smoke
+   ```
+
+Run the full seeded E2E suite only against local, staging, preview, or demo
+tenants. Full seeded tests create data.
 
 ## Common Deployment Errors
 
@@ -222,6 +266,10 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000
   needed for debugging, temporarily set `SECURE_SSL_REDIRECT=False`.
 - Media files disappear after redeploy: local media storage is temporary on many
   platforms. Use persistent disks or cloud storage before relying on uploads.
+- Demo login panel appears in production: set
+  `NEXT_PUBLIC_ENABLE_DEMO_MODE=false` and rebuild the frontend.
+- AI suggestion request fails: confirm `AI_GENERATION_ENABLED=True` and
+  `OPENAI_API_KEY` are both configured.
 
 ## Production Safety Checklist
 
@@ -240,4 +288,18 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000
 - Admin password changed from any demo/default value
 - Demo data not used in real production unless intentional
 - `NEXT_PUBLIC_API_BASE_URL` points to production backend `/api`
+- `NEXT_PUBLIC_ENABLE_DEMO_MODE=false` for real production
 - Backend `/api/docs/` loads after authentication/host setup as expected
+- Backend `/api/health/` returns `status=ok` and `database=ok`
+
+## Known MVP Limitations
+
+- No parent portal yet.
+- No email, SMS, WhatsApp, or push notifications yet; notifications are in-app.
+- Local media uploads on Render/Railway-style ephemeral filesystems are not
+  durable. Use persistent disks or cloud storage before relying on uploaded
+  question diagrams in production.
+- AI question intelligence is an admin/teacher support layer for existing
+  question-bank items. It is not student-facing question generation.
+- Full seeded E2E tests create data and should run only on local, staging,
+  preview, or disposable demo tenants.

@@ -3,6 +3,7 @@
 from django.conf import settings
 from django.db import connection
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import status as drf_status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -15,6 +16,7 @@ class HealthCheckAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
+    @extend_schema(responses=HealthCheckSerializer)
     def get(self, request):
         database_status = "ok"
         response_status = drf_status.HTTP_200_OK

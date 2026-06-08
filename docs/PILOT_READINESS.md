@@ -14,12 +14,15 @@ Backend:
 - `CORS_ALLOWED_ORIGINS`
 - `CSRF_TRUSTED_ORIGINS`
 - `FRONTEND_URL`
+- `DEFAULT_FROM_EMAIL`
 - `DEBUG=false` for deployed environments
+- `AI_GENERATION_ENABLED`
 - `OPENAI_API_KEY` only if AI support features are enabled
 
 Frontend:
 
 - `NEXT_PUBLIC_API_BASE_URL`
+- `NEXT_PUBLIC_ENABLE_DEMO_MODE=false` for real production
 
 Do not place real secrets in the frontend or in committed `.env` files.
 
@@ -59,6 +62,8 @@ Do not place real secrets in the frontend or in committed `.env` files.
 8. Import a small trusted question CSV or ZIP and approve at least one question.
 9. Publish a short assignment and submit it as a student.
 10. Start and submit one practice session.
+11. Confirm `NEXT_PUBLIC_ENABLE_DEMO_MODE=false` for real production. Enable it
+    only for staging/demo walkthroughs.
 
 ## Smoke Verification
 
@@ -110,6 +115,9 @@ inspect logs, then run confirm only for disposable staging/demo data.
 - Local uploaded media on Render is temporary. Use local media only for MVP demos
   and plan cloud storage for durable production media.
 - E2E seeded tests were run against a real tenant and created extra records.
+- Demo mode was enabled on a real production frontend. Disable
+  `NEXT_PUBLIC_ENABLE_DEMO_MODE` and rebuild.
+- AI suggestions are enabled without `OPENAI_API_KEY`.
 
 ## Safe Defaults
 
@@ -117,3 +125,13 @@ inspect logs, then run confirm only for disposable staging/demo data.
 - Health check exposes status only, not secrets.
 - Full seeded E2E is manual/protected in GitHub Actions.
 - Cleanup is dry-run by default and requires `--confirm`.
+- Demo mode is disabled unless `NEXT_PUBLIC_ENABLE_DEMO_MODE=true`.
+
+## Known MVP Limitations
+
+- No parent portal yet.
+- No email, SMS, WhatsApp, or push notifications yet.
+- Local uploaded media on Render/Railway-style filesystems is not durable.
+- AI question intelligence supports existing question-bank review only; it does
+  not generate student-facing questions.
+- Full seeded E2E creates data and should use staging/demo tenants only.

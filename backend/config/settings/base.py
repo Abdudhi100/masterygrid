@@ -202,3 +202,30 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
 }
+
+FRONTEND_URL = env("FRONTEND_URL", default="")
+DEFAULT_FROM_EMAIL = env(
+    "DEFAULT_FROM_EMAIL",
+    default="MasteryGrid <noreply@masterygrid.local>",
+)
+
+OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+OPENAI_MODEL = env("OPENAI_MODEL", default="gpt-4o-mini")
+OPENAI_TIMEOUT_SECONDS = env.int("OPENAI_TIMEOUT_SECONDS", default=60)
+AI_GENERATION_ENABLED = env.bool("AI_GENERATION_ENABLED", default=False)
+AI_STORE_RAW_PROVIDER_RESPONSE = env.bool(
+    "AI_STORE_RAW_PROVIDER_RESPONSE",
+    default=False,
+)
+AI_DAILY_REQUEST_LIMIT_PER_USER = env.int(
+    "AI_DAILY_REQUEST_LIMIT_PER_USER",
+    default=20,
+)
+AI_ALLOW_TEACHER_SUGGESTIONS = env.bool(
+    "AI_ALLOW_TEACHER_SUGGESTIONS",
+    default=True,
+)
+AI_ALLOW_TEACHER_APPLY_SUGGESTIONS = env.bool(
+    "AI_ALLOW_TEACHER_APPLY_SUGGESTIONS",
+    default=False,
+)

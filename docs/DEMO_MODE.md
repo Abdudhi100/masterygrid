@@ -1,6 +1,6 @@
 # MasteryGrid Demo Mode
 
-Demo mode adds a guarded “Try Demo” panel to the login page and a walkthrough
+Demo mode adds a guarded "Try Demo" panel to the login page and a walkthrough
 page for school demos, investor reviews, and product walkthroughs.
 
 Demo mode is frontend-only and must be explicitly enabled:
